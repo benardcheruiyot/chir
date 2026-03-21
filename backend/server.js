@@ -2,13 +2,6 @@
 require('dotenv').config();
 const express = require('express');
 const app = express();
-// --- Simple in-memory rate limiting and pending transaction tracking by msisdn ---
-const stkRateLimit = new Map(); // msisdn -> timestamp
-const stkPendingTx = new Map(); // msisdn -> { txId, createdAt }
-
-require('dotenv').config();
-const express = require('express');
-const app = express();
 app.use(express.json());
 const PORT = process.env.PORT || 1000;
 const axios = require('axios');
