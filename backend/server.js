@@ -1,7 +1,31 @@
 
+
 require('dotenv').config();
 const express = require('express');
 const app = express();
+
+// --- Robust CORS Middleware (MUST be before any routes) ---
+const allowedOrigins = [
+  'http://localhost:1002',
+  'https://extrracash.vercel.app',
+  'https://instantmkoponow.vercel.app'
+];
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  res.setHeader('Vary', 'Origin');
+  if (origin && allowedOrigins.includes(origin.replace(/\/$/, ''))) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+  if (req.method === 'OPTIONS') {
+    res.status(204).end();
+    return;
+  }
+  next();
+});
+
 app.use(express.json());
 const PORT = process.env.PORT || 1000;
 const axios = require('axios');
