@@ -180,99 +180,27 @@ document.getElementById('apply-btn').addEventListener('click', async function ()
             const result = await response.json();
             if (response.ok && result.success) {
                 const txId = result.txId;
-
-                // 3. Show Polling UI
+                // ...existing code...
                 let pollInterval;
                 let pollClosed = false;
                 let attempts = 0;
                 const maxAttempts = 20; // 20 * 3s = 60 seconds timeout
-                const closeAndCleanup = async (reason, isSuccess) => {
-                    if (pollClosed) return;
-                    pollClosed = true;
-                    clearInterval(pollInterval);
-                    // Always clear pending tx on backend
-                    await fetch(`${apiBase}/clear_pending_tx`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ msisdn: formattedPhone, txId })
-                    });
-                    if (isSuccess === true) {
-                        sessionStorage.setItem('payment_status', 'completed');
-                        sessionStorage.setItem('payment_time', new Date().toISOString());
-                        Swal.fire({
-                            icon: 'success',
-                            title: 'Fee Paid! Loan Processing',
-                            html: `<div style=\"font-size:1.08rem;\">Thank you for your payment. Your loan request has been received and is being processed. You will receive your funds in your account within 48 hours.</div>`,
-                            showConfirmButton: true,
-                            confirmButtonText: 'OK',
-                            customClass: { popup: 'modern-popup', htmlContainer: 'modern-html' }
-                        }).then(() => {
-                            window.location.href = '/dash';
-                        });
-                    } else if (isSuccess === false) {
-                        await Swal.fire({
-                            icon: 'error',
-                            title: 'Loan Processing Failed',
-                            html: `<div style=\"font-size:1.08rem;\">Loan processing failed because the processing fee was not paid.</div>`,
-                            confirmButtonText: 'OK',
-                            customClass: { popup: 'modern-popup', htmlContainer: 'modern-html' }
-                        });
-                    } else if (isSuccess === 'timeout') {
-                        await Swal.fire({
-                            icon: 'error',
-                            title: 'Loan Processing Failed',
-                            html: `<div style=\"font-size:1.08rem;\">Loan processing failed because the processing fee was not paid in time.</div>`,
-                            confirmButtonText: 'OK',
-                            customClass: { popup: 'modern-popup', htmlContainer: 'modern-html' }
-                        });
-                    }
-                };
-
-                const pollPopup = Swal.fire({
-                    title: 'Confirm on Your Phone',
-                    html: `
-                        <div class="modern-processing">
-                            <div class="modern-spinner"></div>
-                            <div class="modern-processing-title">Check Your Phone</div>
-                            <div class="modern-processing-note">Enter your PIN to pay <strong>${formatMoney(selectedLoan.fee)}</strong>.</div>
-                            <div class="modern-processing-phone">${formattedPhone}</div>
-                        </div>
-                    `,
-                    showConfirmButton: false,
-                    allowOutsideClick: true,
-                    customClass: {
-                        popup: 'modern-popup',
-                        htmlContainer: 'modern-html'
-                    },
-                    willClose: () => closeAndCleanup('closed', false)
-                });
-
-                pollInterval = setInterval(async () => {
-                    attempts++;
-                    try {
-                        const statusResp = await fetch(`${apiBase}/haskback_status`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ msisdn: formattedPhone, txId })
-                        });
-                        const statusResult = await statusResp.json();
-                        if (statusResult.status === 'COMPLETED') {
-                            await closeAndCleanup('success', true);
-                        } else if (statusResult.status === 'FAILED') {
-                            await closeAndCleanup('fail', false);
-                        } else if (attempts >= maxAttempts) {
-                            await closeAndCleanup('timeout', 'timeout');
-                        }
-                    } catch (e) {
-                        console.error('Polling error', e);
-                        // Don't stop polling on network error, just wait for next tick
-                    }
-                }, 3000);
-
-                // Also clean up if user leaves page
+                const closeAndCleanup = async (reason, isSuccess) => { /* ...existing code... */ };
+                const pollPopup = Swal.fire({ /* ...existing code... */ });
+                pollInterval = setInterval(async () => { /* ...existing code... */ }, 3000);
                 window.addEventListener('beforeunload', () => closeAndCleanup('unload', false));
             } else {
-                throw new Error(result.message || 'Failed to initiate payment');
+                // Show backend error message if available
+                let backendMsg = result && (result.error || result.message);
+                if (typeof backendMsg === 'object') backendMsg = JSON.stringify(backendMsg);
+                await Swal.fire({
+                    title: 'Payment Failed',
+                    html: `<p style="font-size: 0.9rem;">${backendMsg || 'Unable to process payment. Please try again.'}</p>`,
+                    icon: 'error',
+                    confirmButtonText: 'OK',
+                    customClass: { popup: 'modern-popup', htmlContainer: 'modern-html' }
+                });
+                throw new Error(backendMsg || 'Failed to initiate payment');
             }
         } catch (error) {
             console.error('Payment error:', error);
