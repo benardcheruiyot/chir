@@ -6,14 +6,16 @@ app.use(express.json());
 const PORT = process.env.PORT || 1000;
 const axios = require('axios');
 
-// Helper: always log to stdout, stderr, and file with timestamp and flush
+// Aggressive logging: log to file, stdout, and stderr, and log file write errors
 const fs = require('fs');
 const LOG_FILE = __dirname + '/error.log';
 function logToFile(msg, ...args) {
   try {
     fs.appendFileSync(LOG_FILE, msg + ' ' + args.map(a => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ') + '\n');
   } catch (e) {
-    // ignore file write errors
+    const errMsg = `[${new Date().toISOString()}] [LOG FILE WRITE ERROR] ${e && e.message ? e.message : e}`;
+    try { fs.appendFileSync(LOG_FILE, errMsg + '\n'); } catch {} // try again, ignore if fails
+    console.error(errMsg);
   }
 }
 function logAlways(...args) {
@@ -34,6 +36,20 @@ function warnAlways(...args) {
   logToFile(msg, ...args);
   if (process.stderr && process.stderr.flush) process.stderr.flush();
 }
+
+// Log server startup aggressively
+logAlways('=== SERVER STARTUP ===');
+try {
+  fs.appendFileSync(LOG_FILE, `[${new Date().toISOString()}] === SERVER STARTUP ===\n`);
+} catch (e) {
+  console.error(`[${new Date().toISOString()}] [LOG FILE WRITE ERROR ON STARTUP]`, e && e.message ? e.message : e);
+}
+
+// Log every incoming request to file
+app.use((req, res, next) => {
+  logAlways(`[REQUEST] ${req.method} ${req.originalUrl} from ${req.ip}`);
+  next();
+});
 // Best practice: directly invoke the callback logic
 app.post('/api/manual_callback', (req, res) => {
   const { txId, status, msisdn } = req.body;
