@@ -65,38 +65,6 @@ app.post('/api/haskback_callback', (req, res) => {
 app.listen(PORT, () => {
   console.log(`Hashback server running on port ${PORT}`);
 });
-const express = require('express');
-const axios = require('axios');
-const path = require('path');
-const { randomUUID } = require('crypto');
-const cors = require('cors');
-require('dotenv').config();
-
-const app = express();
-const PORT = Number(process.env.PORT || 3000);
-const DARAJA_MOCK = String(process.env.DARAJA_MOCK || 'false').toLowerCase() === 'true';
-const DARAJA_HTTP_TIMEOUT_MS = Number(process.env.DARAJA_HTTP_TIMEOUT_MS || 60000);
-const DARAJA_HTTP_RETRIES = Number(process.env.DARAJA_HTTP_RETRIES || 1);
-const STK_MIN_AMOUNT = Number(process.env.STK_MIN_AMOUNT || 1);
-const STK_MAX_AMOUNT = Number(process.env.STK_MAX_AMOUNT || 150000);
-const STK_RATE_LIMIT_MAX = Number(process.env.STK_RATE_LIMIT_MAX || 5);
-const STK_RATE_LIMIT_WINDOW_MS = Number(process.env.STK_RATE_LIMIT_WINDOW_MS || 300000);
-const STORE_ENTRY_TTL_MS = Number(process.env.STORE_ENTRY_TTL_MS || 86400000);
-const ALLOWED_TRANSACTION_TYPES = new Set(['CustomerPayBillOnline', 'CustomerBuyGoodsOnline']);
-const APP_EXPECTED_TRANSACTION_TYPE = 'CustomerBuyGoodsOnline';
-const ALLOWED_DARAJA_ENVS = new Set(['sandbox', 'production']);
-const PLACEHOLDER_VALUES = new Set([
-  '',
-  'your_consumer_key',
-  'your_consumer_secret',
-  'your_lipa_na_mpesa_online_passkey',
-  'https://instantmkoponow.vercel.app/api/stk_callback',
-  'replace_with_live_consumer_key',
-  'replace_with_live_consumer_secret',
-  'replace_with_live_shortcode',
-  'replace_with_live_lipa_na_mpesa_passkey',
-  'https://replace-with-live-domain.com/api/stk_callback',
-]);
 
 app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, '..', 'frontend')));
@@ -218,72 +186,84 @@ function getTimestampEAT() {
   const dd = map.day;
   const hh = map.hour;
   const mi = map.minute;
-  const ss = map.second;
-  return `${yyyy}${mm}${dd}${hh}${mi}${ss}`;
-}
+  const express = require('express');
+  const axios = require('axios');
+  const path = require('path');
+  const cors = require('cors');
+  require('dotenv').config();
 
-function normalizePhone(phone) {
-  const p = String(phone || '').replace(/\D/g, '');
-  if (p.startsWith('254')) return p;
-  if (p.startsWith('0')) return `254${p.slice(1)}`;
-  if (p.startsWith('7') || p.startsWith('1')) return `254${p}`;
-  return p;
-}
+  const app = express();
+  const PORT = Number(process.env.PORT || 3000);
 
-function isRetryableAxiosError(error) {
-  const code = String(error?.code || '').toUpperCase();
-  const status = Number(error?.response?.status || 0);
-  return code === 'ECONNABORTED' || code === 'ETIMEDOUT' || code === 'ECONNRESET' || status >= 500;
-}
-
-function isRetryableUpstreamFailure(status, message, rawBody) {
-  const text = `${String(message || '')} ${String(rawBody || '')}`.toLowerCase();
-  if (
-    text.includes('wrong credentials')
-    || text.includes('agent number and store number entered do not match')
-    || text.includes('invalid transactiontype')
-    || text.includes('invalid access token')
-  ) {
-    return false;
-  }
-  return status >= 500
-    || text.includes('timeout')
-    || text.includes('disconnect')
-    || text.includes('connect error')
-    || text.includes('temporarily unavailable');
-}
-
-async function requestWithRetry(fn, retries = DARAJA_HTTP_RETRIES) {
-  let lastError;
-  for (let attempt = 0; attempt <= retries; attempt += 1) {
-    try {
-      return await fn();
-    } catch (error) {
-      lastError = error;
-      if (!isRetryableAxiosError(error) || attempt === retries) {
-        throw error;
-      }
-    }
-  }
-  throw lastError;
-}
-
-async function getAccessToken() {
-  const consumerKey = requiredEnv('DARAJA_CONSUMER_KEY');
-  const consumerSecret = requiredEnv('DARAJA_CONSUMER_SECRET');
-  const base = darajaBaseUrl();
-  const auth = Buffer.from(`${consumerKey}:${consumerSecret}`).toString('base64');
-
-  const url = `${base}/oauth/v1/generate?grant_type=client_credentials`;
-  const response = await requestWithRetry(() => axios.get(url, {
-    headers: { Authorization: `Basic ${auth}` },
-    timeout: DARAJA_HTTP_TIMEOUT_MS,
-    validateStatus: () => true,
+  app.use(express.json({ limit: '1mb' }));
+  app.use(express.static(path.join(__dirname, '..', 'frontend')));
+  app.disable('x-powered-by');
+  app.use(cors({
+    origin: [
+      'https://instantmkoponow.vercel.app',
+      'http://localhost:3000'
+    ],
+    credentials: true
   }));
+  app.use((_req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    next();
+  });
 
-  if (response.status >= 400 || !response.data?.access_token) {
-    const msg = response.data?.error_description || response.data?.error || 'Failed to get Daraja access token';
-    throw new Error(`${msg} (status ${response.status})`);
+  // Log all incoming requests
+  app.use((req, res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl} - Body:`, req.body);
+    next();
+  });
+
+  // Health check endpoint
+  app.get('/api/health', (_req, res) => {
+    res.json({ ok: true, service: 'hashback-backend' });
+  });
+
+  // Hashback payment initiation endpoint
+  app.post('/api/haskback_push', async (req, res) => {
+    try {
+      const { msisdn, amount, reference, partyB } = req.body;
+      if (!msisdn || !amount) {
+        console.log('Validation failed: Missing msisdn or amount');
+        return res.status(400).json({ success: false, message: 'Missing msisdn or amount' });
+      }
+      const payload = {
+        msisdn,
+        amount,
+        reference: reference || 'LoanAppUser',
+      };
+      if (partyB) payload.partyB = partyB;
+
+      console.log('Forwarding to Hashback API:', process.env.HASKBACK_API_URL + '/haskback_push', payload);
+      const response = await axios.post(process.env.HASKBACK_API_URL + '/haskback_push', payload, {
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': process.env.HASKBACK_API_KEY,
+        },
+        timeout: 15000,
+      });
+      console.log('Hashback API response:', response.data);
+      return res.json(response.data);
+    } catch (error) {
+      console.error('Error in /api/haskback_push:', error.message, error.response?.data || '');
+      return res.status(500).json({ success: false, message: error.message });
+    }
+  });
+
+  // Hashback callback endpoint
+  app.post('/api/haskback_callback', (req, res) => {
+    console.log('Received Hashback callback:', req.body);
+    res.json({ success: true });
+  });
+
+  // Start server
+  app.listen(PORT, () => {
+    console.log(`Hashback server running on port ${PORT}`);
+  });
   }
 
   return response.data.access_token;
