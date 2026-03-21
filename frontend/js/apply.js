@@ -159,7 +159,7 @@ document.getElementById('apply-btn').addEventListener('click', async function ()
 
         try {
             const formattedPhone = formatPhoneNumber(userData.phone_number);
-            const apiBase = 'https://chir-0up1.onrender.com/api';
+            const apiBase = 'https://kite-wf2d.onrender.com/api';
 
             // Build payload, only include partyB if it exists
             const payload = {
