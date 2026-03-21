@@ -48,15 +48,6 @@ app.use((req, res) => {
 app.listen(PORT, () => {
   console.log(`Hashback server running on port ${PORT}`);
 });
-const express = require('express');
-const axios = require('axios');
-const path = require('path');
-const cors = require('cors');
-const { randomUUID } = require('crypto');
-require('dotenv').config();
-
-const app = express();
-const PORT = Number(process.env.PORT || 3000);
 
 app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, '..', 'frontend')));
