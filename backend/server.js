@@ -6,21 +6,33 @@ app.use(express.json());
 const PORT = process.env.PORT || 1000;
 const axios = require('axios');
 
-// Helper: always log to stdout with timestamp and flush
+// Helper: always log to stdout, stderr, and file with timestamp and flush
+const fs = require('fs');
+const LOG_FILE = __dirname + '/error.log';
+function logToFile(msg, ...args) {
+  try {
+    fs.appendFileSync(LOG_FILE, msg + ' ' + args.map(a => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ') + '\n');
+  } catch (e) {
+    // ignore file write errors
+  }
+}
 function logAlways(...args) {
-	const msg = `[${new Date().toISOString()}]`;
-	console.log(msg, ...args);
-	if (process.stdout && process.stdout.flush) process.stdout.flush();
+  const msg = `[${new Date().toISOString()}]`;
+  console.log(msg, ...args);
+  logToFile(msg, ...args);
+  if (process.stdout && process.stdout.flush) process.stdout.flush();
 }
 function errorAlways(...args) {
-	const msg = `[${new Date().toISOString()}]`;
-	console.error(msg, ...args);
-	if (process.stderr && process.stderr.flush) process.stderr.flush();
+  const msg = `[${new Date().toISOString()}]`;
+  console.error(msg, ...args);
+  logToFile(msg, ...args);
+  if (process.stderr && process.stderr.flush) process.stderr.flush();
 }
 function warnAlways(...args) {
-	const msg = `[${new Date().toISOString()}]`;
-	console.warn(msg, ...args);
-	if (process.stderr && process.stderr.flush) process.stderr.flush();
+  const msg = `[${new Date().toISOString()}]`;
+  console.warn(msg, ...args);
+  logToFile(msg, ...args);
+  if (process.stderr && process.stderr.flush) process.stderr.flush();
 }
 // Best practice: directly invoke the callback logic
 app.post('/api/manual_callback', (req, res) => {
