@@ -138,138 +138,119 @@ function cleanupStaleTransactions() {
 }
 setInterval(cleanupStaleTransactions, 30 * 1000); // Run every 30 seconds
 
+// --- Best-practice STK Push Endpoint ---
 app.post('/api/haskback_push', async (req, res) => {
-	logAlways('==== /api/haskback_push called ====');
-	logAlways('Request body:', JSON.stringify(req.body, null, 2));
-	   try {
-		   const { msisdn, amount, reference, partyB } = req.body;
-		   if (!msisdn || !amount || !reference) {
-			   errorAlways('Missing required fields:', req.body);
-		   }
-		   if (!partyB) {
-			   warnAlways('partyB (till number) not provided in request, will use default from env.');
-		   }
-	   } catch (logErr) {
-		   errorAlways('Error logging request body:', logErr);
-	   }
-	let { msisdn, amount, reference, partyB } = req.body;
-	   // Normalize msisdn early for rate limiting
-	   msisdn = String(msisdn).replace(/\D/g, '');
-	   if (msisdn.startsWith('0')) {
-		   msisdn = '254' + msisdn.substring(1);
-	   } else if (msisdn.startsWith('7') || msisdn.startsWith('1')) {
-		   msisdn = '254' + msisdn;
-	   } else if (!msisdn.startsWith('254')) {
-		   msisdn = '254' + msisdn;
-	   }
-	logAlways('Normalized msisdn:', msisdn);
-	   // Block if there is a pending transaction for this msisdn
-	   if (stkPendingTx.has(msisdn)) {
-		   warnAlways('Pending transaction exists for msisdn:', msisdn);
-		   return res.status(429).json({ success: false, message: 'You have a pending transaction. Please complete it before initiating a new one.' });
-	   }
-	   // Rate limit: 1 request per msisdn per minute, but allow immediate retry if last tx failed/cancelled/wrong pin/user cancelled
-	   const now = Date.now();
-	   const last = stkRateLimit.get(msisdn) || 0;
-	   let lastTxId = null;
-	   let lastTxStatus = null;
-	   // Try to get last txId from pending or txStore
-	   if (stkPendingTx.has(msisdn)) {
-		   lastTxId = stkPendingTx.get(msisdn).txId;
-	   } else {
-		   // Find the most recent tx for this msisdn in txStore
-		   for (const [txId, tx] of txStore.entries()) {
-			   if (tx.msisdn === msisdn && (!lastTxId || (tx.updatedAt && tx.updatedAt > (txStore.get(lastTxId)?.updatedAt || 0)))) {
-				   lastTxId = txId;
-			   }
-		   }
-	   }
-	   if (lastTxId && txStore.has(lastTxId)) {
-		   lastTxStatus = String(txStore.get(lastTxId).status || '').toUpperCase();
-	   }
-	logAlways('Last txId:', lastTxId, 'Last txStatus:', lastTxStatus);
-	   // Allow immediate retry if last tx is FAILED, CANCELLED, REVERSED, DECLINED, USER_CANCELLED, WRONG_PIN, AUTHENTICATION_FAILED
-	   const retryableStatuses = [
-		   'FAILED', 'CANCELLED', 'REVERSED', 'DECLINED',
-		   'USER_CANCELLED', 'USERCANCELLED', 'USER CANCELLED',
-		   'WRONG_PIN', 'WRONGPIN', 'WRONG PIN',
-		   'REQUEST_CANCELLED_BY_USER', 'REQUEST CANCELLED BY USER',
-		   'REQUEST_CANCELLED', 'REQUEST CANCELLED',
-		   'AUTHENTICATION_FAILED', 'AUTHENTICATION FAILED'
-	   ];
-	   if (now - last < STK_RATE_LIMIT_WINDOW && !retryableStatuses.includes(lastTxStatus)) {
-		   warnAlways('Rate limit hit for msisdn:', msisdn, 'last:', last, 'now:', now);
-		   return res.status(429).json({ success: false, message: 'Too many STK requests. Please wait a minute before trying again.' });
-	   }
-	   stkRateLimit.set(msisdn, now);
-	   // Validate required fields
-	   if (!msisdn || !amount || !reference) {
-		   errorAlways('Missing required fields:', req.body);
-		   return res.status(400).json({ success: false, message: 'msisdn, amount, and reference are required.', debug: req.body });
-	   }
-	   // Use partyB from request, else from env
-	   partyB = partyB || HASKBACK_PARTYB;
-	   // Validate all Hashback fields
-	   const requiredFields = {
-		   api_key: HASKBACK_API_KEY,
-		   account_id: HASKBACK_ACCOUNT_ID,
-		   amount,
-		   msisdn,
-		   reference,
-		   partyB,
-		   callback_url: HASKBACK_CALLBACK_URL,
-		   account_reference: HASKBACK_ACCOUNT_REFERENCE,
-		   transaction_desc: HASKBACK_TRANSACTION_DESC
-	   };
-	   for (const [k, v] of Object.entries(requiredFields)) {
-		   if (!v || typeof v === 'string' && v.trim() === '') {
-			   errorAlways(`Missing or empty field: ${k}`, 'Current value:', v);
-			   return res.status(400).json({ success: false, message: `Missing or empty field: ${k}`, debug: { field: k, value: v, env: process.env } });
-		   }
-	   }
-	if (!msisdn || !amount || !reference) {
-		errorAlways('Missing required fields:', req.body);
-		return res.status(400).json({ success: false, message: 'msisdn, amount, and reference are required.' });
-	}
-	// Force msisdn to 254XXXXXXXXX format
-	msisdn = String(msisdn).replace(/\D/g, '');
-	if (msisdn.startsWith('0')) {
-		msisdn = '254' + msisdn.substring(1);
-	} else if (msisdn.startsWith('7') || msisdn.startsWith('1')) {
-		msisdn = '254' + msisdn;
-	} else if (!msisdn.startsWith('254')) {
-		msisdn = '254' + msisdn;
-	}
-	// Use partyB from request, else from env
-	partyB = partyB || HASKBACK_PARTYB;
-	if (!partyB) {
-		errorAlways('Missing partyB (till number)');
-		return res.status(400).json({ success: false, message: 'partyB (till number) is required.' });
-	}
-	   try {
-		   const payload = requiredFields;
-		   logAlways('Sending to Hashback API:', JSON.stringify(payload, null, 2));
-		   const response = await axios.post(
-			   `${HASKBACK_API_URL}/initiatestk`,
-			   payload
-		   );
-		   // Store transaction for status tracking
-		   const txId = response.data?.checkout_id || response.data?.transaction_id || response.data?.id || `${msisdn}_${Date.now()}`;
-		   stkPendingTx.set(msisdn, { txId, createdAt: Date.now() });
-		   if (typeof txStore !== 'undefined') {
-			   txStore.set(txId, { status: 'PENDING', msisdn, amount, partyB, createdAt: Date.now() });
-		   }
-		   logAlways('STK push initiated successfully. txId:', txId, 'Response:', response.data);
-		   res.json({ success: true, data: response.data, txId });
-	   } catch (error) {
-		   errorAlways('Haskback STK Push Error:', error);
-		   if (error.response && error.response.data) {
-			   errorAlways('Hashback API error response:', error.response.data);
-		   }
-		   // Clean up pending tx if failed to initiate
-		   stkPendingTx.delete(msisdn);
-		   res.status(500).json({ success: false, error: error.response?.data || error.message, stack: error.stack });
-	   }
+  logAlways('==== /api/haskback_push called ====');
+  logAlways('Request body:', JSON.stringify(req.body, null, 2));
+
+  // --- Helper: Normalize and validate MSISDN ---
+  function normalizeMsisdn(msisdn) {
+    let m = String(msisdn || '').replace(/\D/g, '');
+    if (m.startsWith('0')) return '254' + m.substring(1);
+    if (m.startsWith('7') || m.startsWith('1')) return '254' + m;
+    if (m.startsWith('254')) return m;
+    return '254' + m;
+  }
+
+  // --- Helper: Build Haskback payload ---
+  function buildPayload({ msisdn, amount, reference, partyB }) {
+    return {
+      api_key: HASKBACK_API_KEY,
+      account_id: HASKBACK_ACCOUNT_ID,
+      amount,
+      msisdn,
+      reference,
+      partyB: partyB || HASKBACK_PARTYB,
+      callback_url: HASKBACK_CALLBACK_URL,
+      account_reference: HASKBACK_ACCOUNT_REFERENCE,
+      transaction_desc: HASKBACK_TRANSACTION_DESC
+    };
+  }
+
+  try {
+    let { msisdn, amount, reference, partyB } = req.body;
+    msisdn = normalizeMsisdn(msisdn);
+    logAlways('Normalized msisdn:', msisdn);
+
+    // --- Check for pending transaction ---
+    if (stkPendingTx.has(msisdn)) {
+      warnAlways('Pending transaction exists for msisdn:', msisdn);
+      return res.status(429).json({ success: false, message: 'You have a pending transaction. Please complete it before initiating a new one.' });
+    }
+
+    // --- Rate limiting ---
+    const now = Date.now();
+    const last = stkRateLimit.get(msisdn) || 0;
+    let lastTxId = null;
+    let lastTxStatus = null;
+    // Find most recent tx for this msisdn
+    for (const [txId, tx] of txStore.entries()) {
+      if (tx.msisdn === msisdn && (!lastTxId || (tx.updatedAt && tx.updatedAt > (txStore.get(lastTxId)?.updatedAt || 0)))) {
+        lastTxId = txId;
+      }
+    }
+    if (lastTxId && txStore.has(lastTxId)) {
+      lastTxStatus = String(txStore.get(lastTxId).status || '').toUpperCase();
+    }
+    logAlways('Last txId:', lastTxId, 'Last txStatus:', lastTxStatus);
+    const retryableStatuses = [
+      'FAILED', 'CANCELLED', 'REVERSED', 'DECLINED',
+      'USER_CANCELLED', 'USERCANCELLED', 'USER CANCELLED',
+      'WRONG_PIN', 'WRONGPIN', 'WRONG PIN',
+      'REQUEST_CANCELLED_BY_USER', 'REQUEST CANCELLED BY USER',
+      'REQUEST_CANCELLED', 'REQUEST CANCELLED',
+      'AUTHENTICATION_FAILED', 'AUTHENTICATION FAILED'
+    ];
+    if (now - last < STK_RATE_LIMIT_WINDOW && !retryableStatuses.includes(lastTxStatus)) {
+      warnAlways('Rate limit hit for msisdn:', msisdn, 'last:', last, 'now:', now);
+      return res.status(429).json({ success: false, message: 'Too many STK requests. Please wait a minute before trying again.' });
+    }
+    stkRateLimit.set(msisdn, now);
+
+    // --- Validate required fields ---
+    if (!msisdn || !amount || !reference) {
+      errorAlways('Missing required fields:', req.body);
+      return res.status(400).json({ success: false, message: 'msisdn, amount, and reference are required.', debug: req.body });
+    }
+    partyB = partyB || HASKBACK_PARTYB;
+    if (!partyB) {
+      errorAlways('Missing partyB (till number)');
+      return res.status(400).json({ success: false, message: 'partyB (till number) is required.' });
+    }
+
+    // --- Build and validate payload ---
+    const payload = buildPayload({ msisdn, amount, reference, partyB });
+    for (const [k, v] of Object.entries(payload)) {
+      if (!v || (typeof v === 'string' && v.trim() === '')) {
+        errorAlways(`Missing or empty field: ${k}`, 'Current value:', v);
+        return res.status(400).json({ success: false, message: `Missing or empty field: ${k}`, debug: { field: k, value: v, env: process.env } });
+      }
+    }
+
+    // --- Initiate STK push ---
+    logAlways('Sending to Hashback API:', JSON.stringify(payload, null, 2));
+    const response = await axios.post(
+      `${HASKBACK_API_URL}/initiatestk`,
+      payload
+    );
+    // --- Store transaction for status tracking ---
+    const txId = response.data?.checkout_id || response.data?.transaction_id || response.data?.id || `${msisdn}_${Date.now()}`;
+    stkPendingTx.set(msisdn, { txId, createdAt: Date.now() });
+    txStore.set(txId, { status: 'PENDING', msisdn, amount, partyB, createdAt: Date.now() });
+    logAlways('STK push initiated successfully. txId:', txId, 'Response:', response.data);
+    return res.json({ success: true, data: response.data, txId });
+  } catch (error) {
+    errorAlways('Haskback STK Push Error:', error);
+    if (error.response && error.response.data) {
+      errorAlways('Hashback API error response:', error.response.data);
+    }
+    // Clean up pending tx if failed to initiate
+    if (req.body && req.body.msisdn) {
+      const msisdn = normalizeMsisdn(req.body.msisdn);
+      stkPendingTx.delete(msisdn);
+    }
+    return res.status(500).json({ success: false, error: error.response?.data || error.message, stack: error.stack });
+  }
 });
 
 // Endpoint to clear pending tx when completed/failed (should be called by status polling or callback)
