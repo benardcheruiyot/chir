@@ -1,6 +1,73 @@
 const express = require('express');
 const axios = require('axios');
 const path = require('path');
+const cors = require('cors');
+require('dotenv').config();
+
+const app = express();
+const PORT = Number(process.env.PORT || 3000);
+
+app.use(express.json({ limit: '1mb' }));
+app.use(express.static(path.join(__dirname, '..', 'frontend')));
+app.disable('x-powered-by');
+app.use(cors({
+  origin: [
+    'https://instantmkoponow.vercel.app',
+    'http://localhost:3000'
+  ],
+  credentials: true
+}));
+
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  next();
+});
+
+// Health check endpoint
+app.get('/api/health', (_req, res) => {
+  res.json({ ok: true, service: 'hashback-backend' });
+});
+// Hashback payment initiation endpoint
+app.post('/api/haskback_push', async (req, res) => {
+  try {
+    const { msisdn, amount, reference, partyB } = req.body;
+    if (!msisdn || !amount) {
+      return res.status(400).json({ success: false, message: 'Missing msisdn or amount' });
+    const payload = {
+      msisdn,
+      amount,
+      reference: reference || 'LoanAppUser',
+    };
+    if (partyB) payload.partyB = partyB;
+
+    const response = await axios.post(process.env.HASKBACK_API_URL + '/haskback_push', payload, {
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.HASKBACK_API_KEY,
+      },
+      timeout: 15000,
+    });
+    return res.json(response.data);
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Hashback callback endpoint
+app.post('/api/haskback_callback', (req, res) => {
+  // Process callback from Hashback here
+  res.json({ success: true });
+});
+
+// Start server
+app.listen(PORT, () => {
+  console.log(`Hashback server running on port ${PORT}`);
+});
+const express = require('express');
+const axios = require('axios');
+const path = require('path');
 const { randomUUID } = require('crypto');
 const cors = require('cors');
 require('dotenv').config();
