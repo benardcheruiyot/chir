@@ -65,7 +65,7 @@ function getClientIp(req) {
   if (forwarded) {
     return forwarded.split(',')[0].trim();
   }
-  return String(req.socket?.remoteAddress || req.ip || 'unknown').trim();
+    return String((req.socket && req.socket.remoteAddress) || req.ip || 'unknown').trim();
 }
 
 function checkRateLimit(key, maxHits, windowMs) {
@@ -208,9 +208,9 @@ async function getAccessToken() {
     validateStatus: () => true,
   }));
 
-  if (response.status >= 400 || !response.data?.access_token) {
-    const msg = response.data?.error_description || response.data?.error || 'Failed to get Daraja access token';
-    throw new Error(`${msg} (status ${response.status})`);
+    if (response.status >= 400 || !(response.data && response.data.access_token)) {
+      const msg = (response.data && (response.data.error_description || response.data.error)) || 'Failed to get Daraja access token';
+      throw new Error(`${msg} (status ${response.status})`);
   }
 
   return response.data.access_token;
@@ -325,8 +325,8 @@ app.get('/api/daraja_test_api', async (_req, res) => {
   } catch (error) {
     return res.status(502).json({
       ok: false,
-      message: error.response?.data?.errorMessage || error.message || 'Daraja API test failed.',
-      details: error.response?.data || null,
+        message: (error.response && error.response.data && error.response.data.errorMessage) || error.message || 'Daraja API test failed.',
+        details: (error.response && error.response.data) || null,
     });
   }
 });
@@ -470,8 +470,8 @@ app.post('/api/stk_initiate', async (req, res) => {
 
     return res.json({ success: true, mode: 'live', data });
   } catch (error) {
-    let message = error.response?.data?.errorMessage || error.response?.data?.ResponseDescription || error.message;
-    let details = error.response?.data || null;
+      let message = (error.response && error.response.data && (error.response.data.errorMessage || error.response.data.ResponseDescription)) || error.message;
+      let details = (error.response && error.response.data) || null;
     // If Daraja returns HTML, log and include it in details for diagnosis
     if (error.response && typeof error.response.data === 'string' && error.response.data.trim().startsWith('<!DOCTYPE html')) {
       message = 'Daraja returned HTML error page (see details)';
@@ -583,14 +583,14 @@ app.post('/api/stk_status', async (req, res) => {
     // Keep pending on transient backend/API issues so frontend can retry polling.
     return res.json({
       status: 'PENDING',
-      message: error.response?.data?.errorMessage || error.message || 'Still processing',
+        message: (error.response && error.response.data && error.response.data.errorMessage) || error.message || 'Still processing',
     });
   }
 });
 
 app.post('/api/stk_callback', (req, res) => {
   try {
-    const body = req.body?.Body?.stkCallback;
+      const body = req.body && req.body.Body && req.body.Body.stkCallback;
     if (!body) {
       return res.status(400).json({ ResultCode: 1, ResultDesc: 'Invalid callback payload' });
     }
