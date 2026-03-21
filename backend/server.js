@@ -115,29 +115,6 @@ app.post('/api/manual_callback', (req, res) => {
   return res.json({ success: true, simulated: true });
 });
 
-// --- Robust CORS Middleware ---
-// Update allowedOrigins to include all valid frontend domains
-const allowedOrigins = [
-  'http://localhost:1002',
-  'https://extrracash.vercel.app',
-  'https://instantmkoponow.vercel.app'
-];
-// Robust CORS middleware: always set Vary, only allow whitelisted origins
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  res.setHeader('Vary', 'Origin');
-  if (origin && allowedOrigins.includes(origin.replace(/\/$/, ''))) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-  }
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
-  if (req.method === 'OPTIONS') {
-    res.status(204).end();
-    return;
-  }
-  next();
-});
 
 app.get('/api/health', (req, res) => res.send('ok'));
 
