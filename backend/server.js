@@ -88,11 +88,11 @@ const stkPendingTx = new Map(); // msisdn -> { txId, createdAt }
 const txStore = new Map(); // txId -> { status, msisdn, amount, partyB, createdAt, updatedAt, ...extra }
 const TX_STATUS_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours
 
-<<<<<<< HEAD
+
 app.listen(PORT, () => {
   console.log(`Hashback server running on port ${PORT}`);
 });
-=======
+
 // Periodically clean up old txStore entries (best practice)
 setInterval(() => {
 	const now = Date.now();
@@ -352,4 +352,4 @@ app.post('/api/haskback_callback', (req, res) => {
 	return res.json({ success: true });
 });
 app.listen(PORT, () => console.log('Listening on', PORT));
->>>>>>> 8a06ef8 (Restore full original backend logic and STK push endpoints)
+
