@@ -118,7 +118,19 @@ setInterval(() => {
 }, 60 * 1000);
 
 app.post('/api/haskback_push', async (req, res) => {
-	console.log('Received /api/haskback_push:', req.body);
+	   console.log('Received /api/haskback_push:', req.body);
+	   // Detailed logging for debugging
+	   try {
+		   const { msisdn, amount, reference, partyB } = req.body;
+		   if (!msisdn || !amount || !reference) {
+			   console.error('Missing required fields:', req.body);
+		   }
+		   if (!partyB) {
+			   console.warn('partyB (till number) not provided in request, will use default from env.');
+		   }
+	   } catch (logErr) {
+		   console.error('Error logging request body:', logErr);
+	   }
 	let { msisdn, amount, reference, partyB } = req.body;
 	// Normalize msisdn early for rate limiting
 	msisdn = String(msisdn).replace(/\D/g, '');

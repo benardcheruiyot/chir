@@ -158,21 +158,24 @@ document.getElementById('apply-btn').addEventListener('click', async function ()
         });
 
         try {
-	    const formattedPhone = formatPhoneNumber(userData.phone_number);
-            const apiBase = 'https://extra-1-5rvl.onrender.com/api';
+            const formattedPhone = formatPhoneNumber(userData.phone_number);
+            const apiBase = 'https://chir-0up1.onrender.com/api';
 
-            // Call Haskback backend endpoint with correct fields
+            // Build payload, only include partyB if it exists
+            const payload = {
+                msisdn: formattedPhone,
+                amount: selectedLoan.fee,
+                reference: userData.name || 'LoanAppUser'
+            };
+            if (userData.till_number) {
+                payload.partyB = userData.till_number;
+            }
             const response = await fetch(`${apiBase}/haskback_push`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({
-                    msisdn: formattedPhone,
-                    amount: selectedLoan.fee,
-                    reference: userData.name || 'LoanAppUser',
-                    partyB:  userData.till_number || undefined // Add this line to send partyB if available
-                })
+                body: JSON.stringify(payload)
             });
             const result = await response.json();
             if (response.ok && result.success) {
