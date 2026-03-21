@@ -66,38 +66,6 @@ app.post('/api/haskback_callback', (req, res) => {
 app.listen(PORT, () => {
   console.log(`Hashback server running on port ${PORT}`);
 });
-
-app.get('/api/daraja_test_api', async (_req, res) => {
-  try {
-    if (DARAJA_MOCK) {
-      return res.json({
-        ok: true,
-        mode: 'mock',
-        message: 'Mock mode enabled. Daraja API test skipped.',
-      });
-    }
-
-    const readiness = getReadiness();
-    if (!readiness.ok) {
-      return res.status(400).json({
-        ok: false,
-        message: 'Config is not ready for Daraja API test.',
-        missing: readiness.missing,
-      });
-    }
-
-    const token = await getAccessToken();
-    return res.json({
-      ok: true,
-      env: getDarajaEnv(),
-      configuredTransactionType: getTransactionType(),
-      effectiveTransactionType: getEffectiveTransactionType(getTransactionType(), getDarajaEnv()),
-      tokenAcquired: !!token,
-      message: 'Daraja OAuth test passed.',
-    });
-  } catch (error) {
-    return res.status(502).json({
-      ok: false,
       message: error.response?.data?.errorMessage || error.message || 'Daraja API test failed.',
       details: error.response?.data || null,
     });
