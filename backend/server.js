@@ -202,11 +202,8 @@ app.post('/api/haskback_push', async (req, res) => {
     msisdn = normalizeMsisdn(msisdn);
     logAlways('Normalized msisdn:', msisdn);
 
-    // --- Check for pending transaction ---
-    if (stkPendingTx.has(msisdn)) {
-      warnAlways('Pending transaction exists for msisdn:', msisdn);
-      return res.status(429).json({ success: false, message: 'You have a pending transaction. Please complete it before initiating a new one.' });
-    }
+    // --- Allow new transaction even if pending exists ---
+    // (No blocking on pending transaction)
 
     // --- Rate limiting ---
     const now = Date.now();
