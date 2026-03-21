@@ -64,19 +64,23 @@ app.post('/api/manual_callback', (req, res) => {
 });
 
 // --- Robust CORS Middleware ---
+// Update allowedOrigins to include all valid frontend domains
 const allowedOrigins = [
-    'http://localhost:1002',
-    'https://extrracash.vercel.app'
+  'http://localhost:1002',
+  'https://extrracash.vercel.app',
+  'https://instantmkoponow.vercel.app', // <-- ensure this is present
+  'https://instantmkoponow.vercel.app/' // (with and without trailing slash for safety)
 ];
+// Robust CORS middleware: always set Vary, only allow whitelisted origins
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin)) {
+  res.setHeader('Vary', 'Origin');
+  if (origin && allowedOrigins.includes(origin.replace(/\/$/, ''))) {
     res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
   }
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
   if (req.method === 'OPTIONS') {
     res.status(204).end();
     return;
