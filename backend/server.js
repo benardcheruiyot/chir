@@ -6,9 +6,7 @@ const app = express();
 
 // --- Robust CORS Middleware (MUST be before any routes) ---
 const allowedOrigins = [
-  'http://localhost:1002',
-  'https://extrracash.vercel.app',
-  'https://instantmkoponow.vercel.app'
+  'https://extrracash.vercel.app'
 ];
 app.use((req, res, next) => {
   const origin = req.headers.origin;

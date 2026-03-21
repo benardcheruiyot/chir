@@ -59,8 +59,7 @@ app.post('/api/manual_callback', (req, res) => {
 
 // --- Robust CORS Middleware ---
 const allowedOrigins = [
-    'http://localhost:1002',
-    'https://extrracash.vercel.app'
+	'https://extrracash.vercel.app'
 ];
 app.use((req, res, next) => {
   const origin = req.headers.origin;
