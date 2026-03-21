@@ -383,6 +383,45 @@ app.post('/api/haskback_callback', (req, res) => {
 		}
 	}
 	return res.json({ success: true });
+  // Extra logging for all callback events and headers
+  logAlways('==== /api/haskback_callback called ====');
+  logAlways('Callback headers:', JSON.stringify(req.headers, null, 2));
+  logAlways('Callback body:', JSON.stringify(req.body, null, 2));
+  if (!txId || !status || !msisdn) {
+    errorAlways('Callback missing required fields:', req.body);
+    return res.status(400).json({ success: false, message: 'txId, status, and msisdn required' });
+  }
+  // Normalize status (best practice)
+  let normStatus = String(status).trim().toUpperCase();
+  // Expanded list of failure statuses to include common user-cancelled and wrong PIN values
+  const failureStatuses = [
+    "FAILED", "CANCELLED", "REVERSED", "DECLINED",
+    "USER_CANCELLED", "USERCANCELLED", "USER CANCELLED",
+    "WRONG_PIN", "WRONGPIN", "WRONG PIN",
+    "REQUEST_CANCELLED_BY_USER", "REQUEST CANCELLED BY USER",
+    "REQUEST_CANCELLED", "REQUEST CANCELLED",
+    "AUTHENTICATION_FAILED", "AUTHENTICATION FAILED"
+  ];
+  if (["SUCCESS", "COMPLETED"].includes(normStatus)) {
+    normStatus = 'COMPLETED';
+  } else if (failureStatuses.includes(normStatus)) {
+    normStatus = 'FAILED';
+  } else {
+    normStatus = 'PENDING';
+  }
+  // Idempotency: only update if new or status changed
+  const prev = txStore.get(txId);
+  if (!prev || prev.status !== normStatus) {
+    txStore.set(txId, { status: normStatus, msisdn, ...extra, updatedAt: Date.now() });
+  }
+  // Always clear pending tx if completed/failed (best practice)
+  if (stkPendingTx.has(msisdn)) {
+    const pending = stkPendingTx.get(msisdn);
+    if (pending && pending.txId === txId) {
+      stkPendingTx.delete(msisdn);
+    }
+  }
+  return res.json({ success: true });
 });
 app.listen(PORT, () => logAlways('Listening on', PORT));
 
