@@ -96,8 +96,7 @@ app.post('/api/manual_callback', (req, res) => {
 const allowedOrigins = [
   'http://localhost:1002',
   'https://extrracash.vercel.app',
-  'https://instantmkoponow.vercel.app', // <-- ensure this is present
-  'https://instantmkoponow.vercel.app/' // (with and without trailing slash for safety)
+  'https://instantmkoponow.vercel.app'
 ];
 // Robust CORS middleware: always set Vary, only allow whitelisted origins
 app.use((req, res, next) => {
