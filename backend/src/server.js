@@ -50,9 +50,8 @@ app.post('/api/manual_callback', (req, res) => {
 
 // --- Robust CORS Middleware ---
 const allowedOrigins = [
-	'http://localhost:1002',
-	// Add your new frontend domain below
-	'https://your-new-frontend-domain.com'
+    'http://localhost:1002',
+    'https://extrracash.vercel.app'
 ];
 app.use((req, res, next) => {
   const origin = req.headers.origin;
