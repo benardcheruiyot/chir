@@ -66,18 +66,6 @@ app.post('/api/haskback_callback', (req, res) => {
 app.listen(PORT, () => {
   console.log(`Hashback server running on port ${PORT}`);
 });
-  return ALLOWED_TRANSACTION_TYPES.has(raw) ? raw : null;
-}
-
-function getEffectiveTransactionType(configuredType, env) {
-  // Daraja sandbox commonly rejects BuyGoods STK transaction type.
-  if (env === 'sandbox' && configuredType === 'CustomerBuyGoodsOnline') {
-    return 'CustomerPayBillOnline';
-  }
-  return configuredType;
-}
-
-function getPartyB(shortCode) {
   // PartyB is intentionally hardcoded to BusinessShortCode for BuyGoods consistency.
   return shortCode;
 }
