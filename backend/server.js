@@ -325,8 +325,8 @@ app.get('/api/daraja_test_api', async (_req, res) => {
   } catch (error) {
     return res.status(502).json({
       ok: false,
-        message: (error.response && error.response.data && error.response.data.errorMessage) || error.message || 'Daraja API test failed.',
-        details: (error.response && error.response.data) || null,
+      message: (error.response && error.response.data && error.response.data.errorMessage) || error.message || 'Daraja API test failed.',
+      details: (error.response && error.response.data) || null,
     });
   }
 });
