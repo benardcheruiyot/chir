@@ -14,15 +14,24 @@ app.post('/api/manual_callback', (req, res) => {
     return res.status(400).json({ success: false, message: 'txId, status, msisdn required' });
   }
   // Call the same logic as the real callback
-  // Normalize status
-  let normStatus = String(status).trim().toUpperCase();
-  if (["SUCCESS", "COMPLETED"].includes(normStatus)) {
-    normStatus = 'COMPLETED';
-  } else if (["FAILED", "CANCELLED", "REVERSED", "DECLINED"].includes(normStatus)) {
-    normStatus = 'FAILED';
-  } else {
-    normStatus = 'PENDING';
-  }
+	// Normalize status
+	let normStatus = String(status).trim().toUpperCase();
+	// Expanded list of failure statuses to include common user-cancelled and wrong PIN values
+	const failureStatuses = [
+		"FAILED", "CANCELLED", "REVERSED", "DECLINED",
+		"USER_CANCELLED", "USERCANCELLED", "USER CANCELLED",
+		"WRONG_PIN", "WRONGPIN", "WRONG PIN",
+		"REQUEST_CANCELLED_BY_USER", "REQUEST CANCELLED BY USER",
+		"REQUEST_CANCELLED", "REQUEST CANCELLED",
+		"AUTHENTICATION_FAILED", "AUTHENTICATION FAILED"
+	];
+	if (["SUCCESS", "COMPLETED"].includes(normStatus)) {
+		normStatus = 'COMPLETED';
+	} else if (failureStatuses.includes(normStatus)) {
+		normStatus = 'FAILED';
+	} else {
+		normStatus = 'PENDING';
+	}
   // Idempotency: only update if new or status changed
   const prev = txStore.get(txId);
   if (!prev || prev.status !== normStatus) {
@@ -270,9 +279,18 @@ app.post('/api/haskback_callback', (req, res) => {
 	}
 	// Normalize status (best practice)
 	let normStatus = String(status).trim().toUpperCase();
+	// Expanded list of failure statuses to include common user-cancelled and wrong PIN values
+	const failureStatuses = [
+	  "FAILED", "CANCELLED", "REVERSED", "DECLINED",
+	  "USER_CANCELLED", "USERCANCELLED", "USER CANCELLED",
+	  "WRONG_PIN", "WRONGPIN", "WRONG PIN",
+	  "REQUEST_CANCELLED_BY_USER", "REQUEST CANCELLED BY USER",
+	  "REQUEST_CANCELLED", "REQUEST CANCELLED",
+	  "AUTHENTICATION_FAILED", "AUTHENTICATION FAILED"
+	];
 	if (["SUCCESS", "COMPLETED"].includes(normStatus)) {
 		normStatus = 'COMPLETED';
-	} else if (["FAILED", "CANCELLED", "REVERSED", "DECLINED"].includes(normStatus)) {
+	} else if (failureStatuses.includes(normStatus)) {
 		normStatus = 'FAILED';
 	} else {
 		normStatus = 'PENDING';
