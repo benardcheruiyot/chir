@@ -1,3 +1,22 @@
+// Helper to clear pending transaction for the current user
+async function clearPendingTransaction(msisdn) {
+    const apiBase = 'https://chir-0up1.onrender.com/api';
+    try {
+        const response = await fetch(`${apiBase}/clear_pending_tx`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ msisdn })
+        });
+        const result = await response.json();
+        if (result.success) {
+            console.log('Pending transaction cleared for', msisdn);
+        } else {
+            console.warn('Failed to clear pending transaction:', result.message);
+        }
+    } catch (err) {
+        console.error('Error clearing pending transaction:', err);
+    }
+}
 // Load user data from SessionStorage
 const userData = JSON.parse(sessionStorage.getItem('myLoan') || '{}');
 
@@ -193,6 +212,19 @@ document.getElementById('apply-btn').addEventListener('click', async function ()
                 // Show backend error message if available
                 let backendMsg = result && (result.error || result.message);
                 if (typeof backendMsg === 'object') backendMsg = JSON.stringify(backendMsg);
+                // If pending transaction error, try to clear and retry
+                if (backendMsg && backendMsg.includes('pending transaction')) {
+                    await clearPendingTransaction(formattedPhone);
+                    await Swal.fire({
+                        title: 'Pending Transaction Cleared',
+                        html: `<p style="font-size: 0.9rem;">A previous pending transaction was cleared. Please try again.</p>`,
+                        icon: 'info',
+                        confirmButtonText: 'Retry',
+                        customClass: { popup: 'modern-popup', htmlContainer: 'modern-html' }
+                    });
+                    setTimeout(() => document.getElementById('apply-btn').click(), 100);
+                    return;
+                }
                 await Swal.fire({
                     title: 'Payment Failed',
                     html: `<p style="font-size: 0.9rem;">${backendMsg || 'Unable to process payment. Please try again.'}</p>`,
