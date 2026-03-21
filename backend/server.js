@@ -6,7 +6,22 @@ app.use(express.json());
 const PORT = process.env.PORT || 1000;
 const axios = require('axios');
 
-// Manual test endpoint to simulate payment result callback (for debugging)
+// Helper: always log to stdout with timestamp and flush
+function logAlways(...args) {
+	const msg = `[${new Date().toISOString()}]`;
+	console.log(msg, ...args);
+	if (process.stdout && process.stdout.flush) process.stdout.flush();
+}
+function errorAlways(...args) {
+	const msg = `[${new Date().toISOString()}]`;
+	console.error(msg, ...args);
+	if (process.stderr && process.stderr.flush) process.stderr.flush();
+}
+function warnAlways(...args) {
+	const msg = `[${new Date().toISOString()}]`;
+	console.warn(msg, ...args);
+	if (process.stderr && process.stderr.flush) process.stderr.flush();
+}
 // Best practice: directly invoke the callback logic
 app.post('/api/manual_callback', (req, res) => {
   const { txId, status, msisdn } = req.body;
@@ -44,7 +59,7 @@ app.post('/api/manual_callback', (req, res) => {
       stkPendingTx.delete(msisdn);
     }
   }
-  console.log('Manual callback simulated:', { txId, status: normStatus, msisdn });
+	logAlways('Manual callback simulated:', { txId, status: normStatus, msisdn });
   return res.json({ success: true, simulated: true });
 });
 
@@ -90,7 +105,7 @@ const TX_STATUS_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours
 
 
 app.listen(PORT, () => {
-  console.log(`Hashback server running on port ${PORT}`);
+logAlways(`Hashback server running on port ${PORT}`);
 });
 
 // Periodically clean up old txStore entries (best practice)
@@ -124,18 +139,18 @@ function cleanupStaleTransactions() {
 setInterval(cleanupStaleTransactions, 30 * 1000); // Run every 30 seconds
 
 app.post('/api/haskback_push', async (req, res) => {
-	   console.log('==== /api/haskback_push called ====');
-	   console.log('Request body:', JSON.stringify(req.body, null, 2));
+	logAlways('==== /api/haskback_push called ====');
+	logAlways('Request body:', JSON.stringify(req.body, null, 2));
 	   try {
 		   const { msisdn, amount, reference, partyB } = req.body;
 		   if (!msisdn || !amount || !reference) {
-			   console.error('Missing required fields:', req.body);
+			   errorAlways('Missing required fields:', req.body);
 		   }
 		   if (!partyB) {
-			   console.warn('partyB (till number) not provided in request, will use default from env.');
+			   warnAlways('partyB (till number) not provided in request, will use default from env.');
 		   }
 	   } catch (logErr) {
-		   console.error('Error logging request body:', logErr);
+		   errorAlways('Error logging request body:', logErr);
 	   }
 	let { msisdn, amount, reference, partyB } = req.body;
 	   // Normalize msisdn early for rate limiting
@@ -147,10 +162,10 @@ app.post('/api/haskback_push', async (req, res) => {
 	   } else if (!msisdn.startsWith('254')) {
 		   msisdn = '254' + msisdn;
 	   }
-	   console.log('Normalized msisdn:', msisdn);
+	logAlways('Normalized msisdn:', msisdn);
 	   // Block if there is a pending transaction for this msisdn
 	   if (stkPendingTx.has(msisdn)) {
-		   console.warn('Pending transaction exists for msisdn:', msisdn);
+		   warnAlways('Pending transaction exists for msisdn:', msisdn);
 		   return res.status(429).json({ success: false, message: 'You have a pending transaction. Please complete it before initiating a new one.' });
 	   }
 	   // Rate limit: 1 request per msisdn per minute, but allow immediate retry if last tx failed/cancelled/wrong pin/user cancelled
@@ -172,7 +187,7 @@ app.post('/api/haskback_push', async (req, res) => {
 	   if (lastTxId && txStore.has(lastTxId)) {
 		   lastTxStatus = String(txStore.get(lastTxId).status || '').toUpperCase();
 	   }
-	   console.log('Last txId:', lastTxId, 'Last txStatus:', lastTxStatus);
+	logAlways('Last txId:', lastTxId, 'Last txStatus:', lastTxStatus);
 	   // Allow immediate retry if last tx is FAILED, CANCELLED, REVERSED, DECLINED, USER_CANCELLED, WRONG_PIN, AUTHENTICATION_FAILED
 	   const retryableStatuses = [
 		   'FAILED', 'CANCELLED', 'REVERSED', 'DECLINED',
@@ -183,13 +198,13 @@ app.post('/api/haskback_push', async (req, res) => {
 		   'AUTHENTICATION_FAILED', 'AUTHENTICATION FAILED'
 	   ];
 	   if (now - last < STK_RATE_LIMIT_WINDOW && !retryableStatuses.includes(lastTxStatus)) {
-		   console.warn('Rate limit hit for msisdn:', msisdn, 'last:', last, 'now:', now);
+		   warnAlways('Rate limit hit for msisdn:', msisdn, 'last:', last, 'now:', now);
 		   return res.status(429).json({ success: false, message: 'Too many STK requests. Please wait a minute before trying again.' });
 	   }
 	   stkRateLimit.set(msisdn, now);
 	   // Validate required fields
 	   if (!msisdn || !amount || !reference) {
-		   console.error('Missing required fields:', req.body);
+		   errorAlways('Missing required fields:', req.body);
 		   return res.status(400).json({ success: false, message: 'msisdn, amount, and reference are required.', debug: req.body });
 	   }
 	   // Use partyB from request, else from env
@@ -208,12 +223,12 @@ app.post('/api/haskback_push', async (req, res) => {
 	   };
 	   for (const [k, v] of Object.entries(requiredFields)) {
 		   if (!v || typeof v === 'string' && v.trim() === '') {
-			   console.error(`Missing or empty field: ${k}`, 'Current value:', v);
+			   errorAlways(`Missing or empty field: ${k}`, 'Current value:', v);
 			   return res.status(400).json({ success: false, message: `Missing or empty field: ${k}`, debug: { field: k, value: v, env: process.env } });
 		   }
 	   }
 	if (!msisdn || !amount || !reference) {
-		console.error('Missing required fields:', req.body);
+		errorAlways('Missing required fields:', req.body);
 		return res.status(400).json({ success: false, message: 'msisdn, amount, and reference are required.' });
 	}
 	// Force msisdn to 254XXXXXXXXX format
@@ -228,12 +243,12 @@ app.post('/api/haskback_push', async (req, res) => {
 	// Use partyB from request, else from env
 	partyB = partyB || HASKBACK_PARTYB;
 	if (!partyB) {
-		console.error('Missing partyB (till number)');
+		errorAlways('Missing partyB (till number)');
 		return res.status(400).json({ success: false, message: 'partyB (till number) is required.' });
 	}
 	   try {
 		   const payload = requiredFields;
-		   console.log('Sending to Hashback API:', JSON.stringify(payload, null, 2));
+		   logAlways('Sending to Hashback API:', JSON.stringify(payload, null, 2));
 		   const response = await axios.post(
 			   `${HASKBACK_API_URL}/initiatestk`,
 			   payload
@@ -244,12 +259,12 @@ app.post('/api/haskback_push', async (req, res) => {
 		   if (typeof txStore !== 'undefined') {
 			   txStore.set(txId, { status: 'PENDING', msisdn, amount, partyB, createdAt: Date.now() });
 		   }
-		   console.log('STK push initiated successfully. txId:', txId, 'Response:', response.data);
+		   logAlways('STK push initiated successfully. txId:', txId, 'Response:', response.data);
 		   res.json({ success: true, data: response.data, txId });
 	   } catch (error) {
-		   console.error('Haskback STK Push Error:', error);
+		   errorAlways('Haskback STK Push Error:', error);
 		   if (error.response && error.response.data) {
-			   console.error('Hashback API error response:', error.response.data);
+			   errorAlways('Hashback API error response:', error.response.data);
 		   }
 		   // Clean up pending tx if failed to initiate
 		   stkPendingTx.delete(msisdn);
@@ -273,7 +288,7 @@ app.post('/api/clear_pending_tx', (req, res) => {
 // Endpoint to check payment status for msisdn and txId
 // Robust status endpoint (best practice)
 app.post('/api/haskback_status', (req, res) => {
-	console.log('Status check:', req.body);
+	logAlways('Status check:', req.body);
 	let { msisdn, txId } = req.body;
 	if (!msisdn || !txId) {
 		return res.status(400).json({ status: 'FAILED', message: 'msisdn and txId required' });
@@ -319,7 +334,7 @@ app.post('/api/haskback_status', (req, res) => {
 // Haskback payment result callback endpoint (best practice)
 app.post('/api/haskback_callback', (req, res) => {
 	// Log all callback events for audit/debug
-	console.log('Haskback callback received:', req.body);
+	logAlways('Haskback callback received:', req.body);
 	const { txId, status, msisdn, ...extra } = req.body;
 	if (!txId || !status || !msisdn) {
 		return res.status(400).json({ success: false, message: 'txId, status, and msisdn required' });
@@ -356,5 +371,5 @@ app.post('/api/haskback_callback', (req, res) => {
 	}
 	return res.json({ success: true });
 });
-app.listen(PORT, () => console.log('Listening on', PORT));
+app.listen(PORT, () => logAlways('Listening on', PORT));
 
