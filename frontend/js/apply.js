@@ -177,36 +177,27 @@ document.getElementById('apply-btn').addEventListener('click', async function ()
         if (pollInterval) clearInterval(pollInterval);
         if (isSuccess) {
             Swal.fire({
-                toast: true,
-                position: 'top-end',
                 icon: 'success',
-                title: 'Payment was received successfully!',
-                showConfirmButton: false,
-                timer: 3500,
-                timerProgressBar: true,
-                customClass: { popup: 'modern-popup' }
+                title: 'Payment Successful',
+                html: `<div style="font-size:1.1rem;">Your payment was received successfully.<br><span style='font-size:2rem;display:inline-block;margin-top:10px;'>✅</span></div>`,
+                confirmButtonText: 'Done',
+                customClass: { popup: 'modern-popup', htmlContainer: 'modern-html' }
             });
         } else if (reason === 'timeout') {
             Swal.fire({
-                toast: true,
-                position: 'top-end',
                 icon: 'warning',
-                title: 'No response from M-Pesa. Please check your phone and try again.',
-                showConfirmButton: false,
-                timer: 3500,
-                timerProgressBar: true,
-                customClass: { popup: 'modern-popup' }
+                title: 'No Response from M-Pesa',
+                html: `<div style='font-size:1.05rem;'>We didn’t get a response from M-Pesa.<br><span style='color:#64748b;'>Please check your phone and try again.</span><br><span style='font-size:2rem;display:inline-block;margin-top:10px;'>📱</span></div>`,
+                confirmButtonText: 'Try Again',
+                customClass: { popup: 'modern-popup', htmlContainer: 'modern-html' }
             });
         } else if (reason === 'failed') {
             Swal.fire({
-                toast: true,
-                position: 'top-end',
                 icon: 'error',
-                title: 'Payment was not completed. Please try again.',
-                showConfirmButton: false,
-                timer: 3500,
-                timerProgressBar: true,
-                customClass: { popup: 'modern-popup' }
+                title: 'Payment Failed',
+                html: `<div style='font-size:1.05rem;'>Payment was not completed.<br><span style='color:#64748b;'>Please try again.</span><br><span style='font-size:2rem;display:inline-block;margin-top:10px;'>❌</span></div>`,
+                confirmButtonText: 'Try Again',
+                customClass: { popup: 'modern-popup', htmlContainer: 'modern-html' }
             });
         }
     };
@@ -214,13 +205,21 @@ document.getElementById('apply-btn').addEventListener('click', async function ()
     // Show the modal immediately
     pollPopup = Swal.fire({
         title: 'Waiting for Payment',
-        html: `<div style="font-size:1.1rem;">Check your phone for the M-Pesa prompt.<br><br><b>Do not close this window.</b><br><br><span id="poll-status-msg">Awaiting payment...</span></div>`,
+        html: `
+            <div style="display:flex;flex-direction:column;align-items:center;">
+                <div class="modern-spinner" style="margin-bottom:18px;"></div>
+                <div style="font-size:1.1rem;margin-bottom:8px;">
+                    <b>Check your phone for the M-Pesa prompt</b>
+                </div>
+                <div style="color:#64748b;font-size:0.98rem;">
+                    Please approve the payment on your phone to continue.<br>
+                    <span style="font-size:1.3rem;display:inline-block;margin-top:8px;">📱</span>
+                </div>
+            </div>
+        `,
         allowOutsideClick: false,
         showCancelButton: true,
         cancelButtonText: 'Cancel',
-        didOpen: () => {
-            document.getElementById('poll-status-msg').textContent = 'Awaiting payment...';
-        },
         customClass: { popup: 'modern-popup', htmlContainer: 'modern-html' }
     });
 

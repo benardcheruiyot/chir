@@ -153,11 +153,23 @@
 
         /* Modern SweetAlert Theme */
         .swal2-popup.modern-popup {
-            background: #ffffff !important;
-            border-radius: 18px !important;
-            padding: 22px !important;
-            box-shadow: 0 24px 70px rgba(15, 23, 42, 0.22) !important;
-            max-width: 430px !important;
+            background: linear-gradient(135deg, #f8fafc 0%, #e0f7ef 100%) !important;
+            border-radius: 22px !important;
+            padding: 28px 24px 24px 24px !important;
+            box-shadow: 0 12px 40px rgba(0, 166, 81, 0.18), 0 2px 8px rgba(15, 23, 42, 0.10) !important;
+            max-width: 440px !important;
+            border-top: 6px solid #00A651 !important;
+            animation: modern-modal-in 0.45s cubic-bezier(0.23, 1, 0.32, 1);
+            position: relative;
+        }
+
+        /* Add icon at the top for status (success, error, warning) */
+        .swal2-popup.modern-popup .swal2-icon {
+            margin-top: -38px !important;
+            margin-bottom: 10px !important;
+            width: 56px !important;
+            height: 56px !important;
+        }
         }
 
         .swal2-html-container.modern-html {
@@ -233,14 +245,38 @@
 
         .modern-confirm-btn {
             color: #fff !important;
-            background-color: #00A651 !important;
-            background-image: linear-gradient(135deg, #008740 0%, #00A651 100%) !important;
-            box-shadow: 0 8px 20px rgba(0, 166, 81, 0.3) !important;
+            background: linear-gradient(135deg, #00A651 0%, #008740 100%) !important;
+            box-shadow: 0 8px 24px rgba(0, 166, 81, 0.18) !important;
+            transition: background 0.2s, box-shadow 0.2s, transform 0.15s;
+        }
+
+        .modern-confirm-btn:hover {
+            background: linear-gradient(135deg, #00c97b 0%, #00A651 100%) !important;
+            box-shadow: 0 12px 32px rgba(0, 166, 81, 0.22) !important;
+            transform: translateY(-2px) scale(1.03);
         }
 
         .modern-cancel-btn {
             color: #334155 !important;
             background: #e2e8f0 !important;
+            transition: background 0.2s, color 0.2s, transform 0.15s;
+        }
+
+        .modern-cancel-btn:hover {
+            background: #cbd5e1 !important;
+            color: #0f172a !important;
+            transform: translateY(-2px) scale(1.03);
+        }
+        /* Modal entrance animation */
+        @keyframes modern-modal-in {
+            0% {
+                opacity: 0;
+                transform: translateY(40px) scale(0.95);
+            }
+            100% {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
         }
 
         .modern-processing {
