@@ -191,9 +191,8 @@ document.getElementById('apply-btn').addEventListener('click', async function ()
                 confirmButtonText: 'Try Again',
                 customClass: { popup: 'modern-popup', htmlContainer: 'modern-html', confirmButton: 'modern-confirm-btn-green' }
             }).then((result) => {
-                if (result.isConfirmed) {
-                    window.location.href = '/apply';
-                }
+                // Redirect on confirm or if modal is dismissed in any way
+                window.location.replace('/apply');
             });
         }
     };
