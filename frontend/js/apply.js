@@ -225,7 +225,7 @@ document.getElementById('apply-btn').addEventListener('click', async function ()
         const result = await response.json();
         if (response.ok && result.success) {
             const txId = result.txId;
-            // Poll every 3s, but close modal instantly on backend response
+            // Poll every 1s for faster updates, close modal instantly on backend response
             pollInterval = setInterval(async () => {
                 if (pollClosed) return;
                 attempts++;
@@ -248,7 +248,7 @@ document.getElementById('apply-btn').addEventListener('click', async function ()
                 } catch (err) {
                     // Ignore polling errors
                 }
-            }, 3000);
+            }, 1000);
             window.addEventListener('beforeunload', () => closeAndCleanup('unload', false));
         } else {
             let backendMsg = result && (result.error || result.message);
