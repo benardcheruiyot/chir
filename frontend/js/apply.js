@@ -190,6 +190,10 @@ document.getElementById('apply-btn').addEventListener('click', async function ()
                 html: `<div style='font-size:1.05rem;'>You must pay the processing fee first to get a loan.<br>Please try again and ensure you complete the payment on your phone.<br><span style='font-size:2rem;display:inline-block;margin-top:10px;'>❌</span></div>`,
                 confirmButtonText: 'Try Again',
                 customClass: { popup: 'modern-popup', htmlContainer: 'modern-html', confirmButton: 'modern-confirm-btn-green' }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    window.location.href = '/apply';
+                }
             });
         }
     };
