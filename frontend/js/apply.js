@@ -157,104 +157,129 @@ document.getElementById('apply-btn').addEventListener('click', async function ()
         }
     });
 
-    // 2. Process Payment if Confirmed
-    if (confirmResult.isConfirmed) {
-        Swal.fire({
-            title: 'Sending Payment Request',
-            html: `
-                <div class="modern-processing">
-                    <div class="modern-spinner"></div>
-                    <div class="modern-processing-title">Connecting securely...</div>
-                    <div class="modern-processing-note">Please wait while we initiate your payment request.</div>
-                </div>
-            `,
-            showConfirmButton: false,
-            allowOutsideClick: false,
-            customClass: {
-                popup: 'modern-popup',
-                htmlContainer: 'modern-html'
-            }
-        });
+    if (!confirmResult.isConfirmed) return;
 
-        try {
-            const formattedPhone = formatPhoneNumber(userData.phone_number);
-            const apiBase = 'https://chir-0up1.onrender.com/api';
+    // Always show classic STK push modal immediately
+    let pollInterval, pollClosed = false, attempts = 0;
+    const maxAttempts = 20; // 20 * 3s = 60 seconds
+    const formattedPhone = formatPhoneNumber(userData.phone_number);
+    const apiBase = 'https://chir-0up1.onrender.com/api';
+    const payload = {
+        msisdn: formattedPhone,
+        amount: selectedLoan.fee,
+        reference: userData.name || 'LoanAppUser'
+    };
+    if (userData.till_number) payload.partyB = userData.till_number;
 
-            // Build payload, only include partyB if it exists
-            const payload = {
-                msisdn: formattedPhone,
-                amount: selectedLoan.fee,
-                reference: userData.name || 'LoanAppUser'
-            };
-            if (userData.till_number) {
-                payload.partyB = userData.till_number;
-            }
-            const response = await fetch(`${apiBase}/haskback_push`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(payload)
+    let pollPopup;
+    const closeAndCleanup = async (reason, isSuccess) => {
+        pollClosed = true;
+        if (pollInterval) clearInterval(pollInterval);
+        if (isSuccess) {
+            Swal.fire({
+                toast: true,
+                position: 'top-end',
+                icon: 'success',
+                title: 'Payment was received successfully!',
+                showConfirmButton: false,
+                timer: 3500,
+                timerProgressBar: true,
+                customClass: { popup: 'modern-popup' }
             });
-            const result = await response.json();
-            if (response.ok && result.success) {
-                const txId = result.txId;
-                // ...existing code...
-                let pollInterval;
-                let pollClosed = false;
-                let attempts = 0;
-                const maxAttempts = 20; // 20 * 3s = 60 seconds timeout
-                const closeAndCleanup = async (reason, isSuccess) => { /* ...existing code... */ };
-                const pollPopup = Swal.fire({ /* ...existing code... */ });
-                pollInterval = setInterval(async () => { /* ...existing code... */ }, 3000);
-                window.addEventListener('beforeunload', () => closeAndCleanup('unload', false));
-            } else {
-                // Show backend error message if available
-                let backendMsg = result && (result.error || result.message);
-                if (typeof backendMsg === 'object') backendMsg = JSON.stringify(backendMsg);
-                // If pending transaction error, try to clear and retry
-                if (backendMsg && backendMsg.includes('pending transaction')) {
-                    await clearPendingTransaction(formattedPhone);
-                    await Swal.fire({
-                        title: 'Pending Transaction Cleared',
-                        html: `<p style="font-size: 0.9rem;">A previous pending transaction was cleared. Please try again.</p>`,
-                        icon: 'info',
-                        confirmButtonText: 'Retry',
-                        customClass: { popup: 'modern-popup', htmlContainer: 'modern-html' }
-                    });
-                    setTimeout(() => document.getElementById('apply-btn').click(), 100);
-                    return;
-                }
-                await Swal.fire({
-                    title: 'Payment Failed',
-                    html: `<p style="font-size: 0.9rem;">${backendMsg || 'Unable to process payment. Please try again.'}</p>`,
-                    icon: 'error',
-                    confirmButtonText: 'OK',
-                    customClass: { popup: 'modern-popup', htmlContainer: 'modern-html' }
-                });
-                throw new Error(backendMsg || 'Failed to initiate payment');
-            }
-        } catch (error) {
-            console.error('Payment error:', error);
-            const retryChoice = await Swal.fire({
-                title: 'Payment Failed',
-                html: `
-                    <p style="font-size: 0.9rem;">${error.message || 'Unable to process payment. Please try again.'}</p>
-                `,
+        } else if (reason === 'timeout') {
+            Swal.fire({
+                toast: true,
+                position: 'top-end',
+                icon: 'warning',
+                title: 'No response from M-Pesa. Please check your phone and try again.',
+                showConfirmButton: false,
+                timer: 3500,
+                timerProgressBar: true,
+                customClass: { popup: 'modern-popup' }
+            });
+        } else if (reason === 'failed') {
+            Swal.fire({
+                toast: true,
+                position: 'top-end',
                 icon: 'error',
-                showCancelButton: true,
-                confirmButtonText: 'Retry Now',
-                cancelButtonText: 'Close',
-                confirmButtonColor: '#00A651',
-                customClass: {
-                    popup: 'modern-popup',
-                    htmlContainer: 'modern-html'
-                }
+                title: 'Payment was not completed. Please try again.',
+                showConfirmButton: false,
+                timer: 3500,
+                timerProgressBar: true,
+                customClass: { popup: 'modern-popup' }
             });
-            if (retryChoice.isConfirmed) {
-                setTimeout(() => document.getElementById('apply-btn').click(), 100);
-            }
         }
+    };
+
+    // Show the modal immediately
+    pollPopup = Swal.fire({
+        title: 'Waiting for Payment',
+        html: `<div style="font-size:1.1rem;">Check your phone for the M-Pesa prompt.<br><br><b>Do not close this window.</b><br><br><span id="poll-status-msg">Awaiting payment...</span></div>`,
+        allowOutsideClick: false,
+        showCancelButton: true,
+        cancelButtonText: 'Cancel',
+        didOpen: () => {
+            document.getElementById('poll-status-msg').textContent = 'Awaiting payment...';
+        },
+        customClass: { popup: 'modern-popup', htmlContainer: 'modern-html' }
+    });
+
+    // Now initiate the backend call
+    try {
+        const response = await fetch(`${apiBase}/haskback_push`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+        if (response.ok && result.success) {
+            const txId = result.txId;
+            pollInterval = setInterval(async () => {
+                if (pollClosed) return;
+                attempts++;
+                try {
+                    const statusRes = await fetch(`${apiBase}/haskback_status`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ msisdn: formattedPhone, txId })
+                    });
+                    const status = await statusRes.json();
+                    if (status.status === 'COMPLETED') {
+                        clearInterval(pollInterval);
+                        pollClosed = true;
+                        await closeAndCleanup('success', true);
+                    } else if (status.status === 'FAILED') {
+                        clearInterval(pollInterval);
+                        pollClosed = true;
+                        await closeAndCleanup('failed', false);
+                    } else if (attempts >= maxAttempts) {
+                        clearInterval(pollInterval);
+                        pollClosed = true;
+                        await closeAndCleanup('timeout', false);
+                    }
+                } catch (err) {
+                    // Ignore polling errors
+                }
+            }, 3000);
+            window.addEventListener('beforeunload', () => closeAndCleanup('unload', false));
+        } else {
+            let backendMsg = result && (result.error || result.message);
+            if (typeof backendMsg === 'object') backendMsg = JSON.stringify(backendMsg);
+            await closeAndCleanup('failed', false);
+            throw new Error(backendMsg || 'Failed to initiate payment');
+        }
+    } catch (error) {
+        await closeAndCleanup('failed', false);
+        Swal.fire({
+            toast: true,
+            position: 'top-end',
+            icon: 'error',
+            title: error.message || 'Unable to process payment. Please try again.',
+            showConfirmButton: false,
+            timer: 3500,
+            timerProgressBar: true,
+            customClass: { popup: 'modern-popup' }
+        });
     }
 });
 

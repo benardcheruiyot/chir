@@ -1,0 +1,25 @@
+[2026-03-21T21:31:19.387Z] === SERVER STARTUP ===
+[2026-03-21T21:31:19.390Z] === SERVER STARTUP ===
+[2026-03-21T21:31:19.398Z] Hashback server running on port 1002
+[2026-03-21T21:31:19.399Z] Listening on 1002
+[2026-03-21T21:31:56.248Z] [REQUEST] POST /api/haskback_push from ::1
+[2026-03-21T21:31:56.251Z] ==== /api/haskback_push called ====
+[2026-03-21T21:31:56.252Z] Request body: {
+  "msisdn": "0712345678",
+  "amount": 10,
+  "reference": "test123"
+}
+[2026-03-21T21:31:56.254Z] Normalized msisdn: 254712345678
+[2026-03-21T21:31:56.255Z] Last txId: null Last txStatus: null
+[2026-03-21T21:31:56.257Z] Sending to Hashback API: {
+  "api_key": "h26419kBjc6nJ",
+  "account_id": "HP833255",
+  "amount": 10,
+  "msisdn": "254712345678",
+  "reference": "test123",
+  "partyB": "8267646",
+  "callback_url": "https://extrracash.vercel.app/api/haskback_callback",
+  "account_reference": "NewApp",
+  "transaction_desc": "NewApp loan processing fee"
+}
+[2026-03-21T21:31:58.852Z] STK push initiated successfully. txId: 254712345678_1774128718852 Response: {"MerchantRequestID":"4bfc-46f1-b4f8-4b4e58733be41259887","CheckoutRequestID":"ws_CO_22032026003157200712345678","ResponseCode":"0","ResponseDescription":"Success. Request accepted for processing","CustomerMessage":"Success. Request accepted for processing"}
