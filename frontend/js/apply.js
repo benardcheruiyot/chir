@@ -56,6 +56,11 @@ function extractErrorMessage(raw) {
     return text;
 }
 
+function shouldRetryPayment(result, error) {
+    const message = extractErrorMessage(result && (result.message || result.error || result.reason) || error && error.message).toLowerCase();
+    return message.includes('temporarily unavailable') || message.includes('too many requests') || message.includes('try again shortly');
+}
+
 // Helper to format phone number to 254XXXXXXXXX
 function formatPhoneNumber(phone) {
     let p = phone.toString().replace(/\D/g, ''); // Remove non-digits
@@ -238,12 +243,41 @@ document.getElementById('apply-btn').addEventListener('click', async function ()
 
     // Now initiate the backend call
     try {
-        const response = await fetch(`${apiBase}/haskback_push`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        const result = await response.json();
+        let result;
+        let response;
+        let requestError;
+
+        for (let attempt = 1; attempt <= 2; attempt++) {
+            try {
+                response = await fetch(`${apiBase}/haskback_push`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                result = await response.json();
+            } catch (err) {
+                requestError = err;
+            }
+
+            if (response && response.ok && result && result.success) {
+                break;
+            }
+
+            if (attempt < 2 && shouldRetryPayment(result, requestError)) {
+                await sleep((result && result.retryAfterMs) || 4000);
+                response = null;
+                result = null;
+                requestError = null;
+                continue;
+            }
+
+            if (requestError) {
+                throw requestError;
+            }
+
+            break;
+        }
+
         if (response.ok && result.success) {
             const txId = result.txId;
             // Poll every 1s for faster updates, close modal instantly on backend response

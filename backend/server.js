@@ -142,6 +142,11 @@ function isRateLimited(error) {
   return Number(error?.response?.status) === 429;
 }
 
+function isTransientProviderError(error) {
+  const status = Number(error?.response?.status);
+  return status === 408 || status === 425 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
+}
+
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -158,6 +163,23 @@ async function sendBackupPush(payload, attempts = 2) {
       }
       warnAlways(`Backup push rate-limited. Retrying attempt ${attempt + 1} of ${attempts}.`);
       await delay(1200 * attempt);
+    }
+  }
+  throw lastError;
+}
+
+async function sendPrimaryPush(url, payload, attempts = 2) {
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await axios.post(url, payload, { timeout: 45000 });
+    } catch (error) {
+      lastError = error;
+      if (!isTransientProviderError(error) || shouldUseBackupPush(error) || attempt === attempts) {
+        throw error;
+      }
+      warnAlways(`Primary push transient failure. Retrying attempt ${attempt + 1} of ${attempts}.`);
+      await delay(1500 * attempt);
     }
   }
   throw lastError;
@@ -233,10 +255,7 @@ app.post('/api/haskback_push', async (req, res) => {
     }
     // --- Initiate STK push ---
     logAlways('Sending to Hashback API:', JSON.stringify(payload, null, 2));
-    const response = await axios.post(
-      `${HASKBACK_API_URL}/initiatestk`,
-      payload
-    );
+    const response = await sendPrimaryPush(`${HASKBACK_API_URL}/initiatestk`, payload, 3);
     // --- Store transaction for status tracking ---
     const txId = response.data?.checkout_id || response.data?.transaction_id || response.data?.id || `${msisdn}_${Date.now()}`;
     txStore.set(txId, { status: 'PENDING', msisdn, amount, partyB, createdAt: Date.now(), updatedAt: Date.now() });
@@ -263,7 +282,8 @@ app.post('/api/haskback_push', async (req, res) => {
         return res.status(502).json({
           success: false,
           message: 'Payment provider temporarily unavailable. Please try again shortly.',
-          reason: shouldUseBackupPush(error) ? 'primary-account-expired' : 'backup-failed'
+          reason: shouldUseBackupPush(error) ? 'primary-account-expired' : 'backup-failed',
+          retryAfterMs: 4000
         });
       }
     }
