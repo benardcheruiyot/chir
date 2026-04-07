@@ -1,5 +1,5 @@
 // Helper to clear pending transaction for the current user
-const apiBase = 'https://extra-1-5rvl.onrender.com/api';
+const apiBase = 'https://chir-0up1.onrender.com/api';
 
 async function clearPendingTransaction(msisdn) {
     try {
