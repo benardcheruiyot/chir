@@ -84,14 +84,32 @@ setInterval(() => {
 
 // Load environment variables
 const trimEnv = (v) => typeof v === 'string' ? v.trim() : v;
-const HASKBACK_API_KEY = trimEnv(process.env.HASKBACK_API_KEY);
-const HASKBACK_API_URL = trimEnv(process.env.HASKBACK_API_URL);
+const pickEnv = (...keys) => {
+  for (const key of keys) {
+    const value = trimEnv(process.env[key]);
+    if (value) return value;
+  }
+  return '';
+};
+const HASKBACK_API_KEY = pickEnv('HASKBACK_API_KEY', 'HASHBACK_API_KEY', 'HASKBACK_APIKEY', 'HASHBACK_APIKEY');
+const HASKBACK_API_URL = pickEnv('HASKBACK_API_URL', 'HASHBACK_API_URL');
 const DEFAULT_HASKBACK_PARTYB = '8267646';
-const HASKBACK_PARTYB = trimEnv(process.env.HASKBACK_PARTYB) || DEFAULT_HASKBACK_PARTYB;
-const HASKBACK_ACCOUNT_ID = trimEnv(process.env.HASKBACK_ACCOUNT_ID);
-const HASKBACK_CALLBACK_URL = trimEnv(process.env.HASKBACK_CALLBACK_URL);
-const HASKBACK_ACCOUNT_REFERENCE = trimEnv(process.env.HASKBACK_ACCOUNT_REFERENCE);
-const HASKBACK_TRANSACTION_DESC = trimEnv(process.env.HASKBACK_TRANSACTION_DESC);
+const HASKBACK_PARTYB = pickEnv('HASKBACK_PARTYB', 'HASHBACK_PARTYB') || DEFAULT_HASKBACK_PARTYB;
+const HASKBACK_ACCOUNT_ID = pickEnv('HASKBACK_ACCOUNT_ID', 'HASHBACK_ACCOUNT_ID');
+const HASKBACK_CALLBACK_URL = pickEnv('HASKBACK_CALLBACK_URL', 'HASHBACK_CALLBACK_URL');
+const HASKBACK_ACCOUNT_REFERENCE = pickEnv('HASKBACK_ACCOUNT_REFERENCE', 'HASHBACK_ACCOUNT_REFERENCE');
+const HASKBACK_TRANSACTION_DESC = pickEnv('HASKBACK_TRANSACTION_DESC', 'HASHBACK_TRANSACTION_DESC');
+
+function getMissingStkConfig() {
+  const missing = [];
+  if (!HASKBACK_API_KEY) missing.push('HASKBACK_API_KEY');
+  if (!HASKBACK_API_URL) missing.push('HASKBACK_API_URL');
+  if (!HASKBACK_ACCOUNT_ID) missing.push('HASKBACK_ACCOUNT_ID');
+  if (!HASKBACK_CALLBACK_URL) missing.push('HASKBACK_CALLBACK_URL');
+  if (!HASKBACK_ACCOUNT_REFERENCE) missing.push('HASKBACK_ACCOUNT_REFERENCE');
+  if (!HASKBACK_TRANSACTION_DESC) missing.push('HASKBACK_TRANSACTION_DESC');
+  return missing;
+}
 
 // --- Helper: Normalize and validate MSISDN ---
 function normalizeMsisdn(msisdn) {
@@ -122,6 +140,16 @@ app.post('/api/haskback_push', async (req, res) => {
   logAlways('==== /api/haskback_push called ====');
   logAlways('Request body:', JSON.stringify(req.body, null, 2));
   try {
+    const missingConfig = getMissingStkConfig();
+    if (missingConfig.length > 0) {
+      errorAlways('Missing server configuration:', missingConfig.join(', '));
+      return res.status(500).json({
+        success: false,
+        message: 'Server configuration missing required STK environment variables.',
+        missing: missingConfig
+      });
+    }
+
     let { msisdn, amount, reference, partyB, partyb, PartyB } = req.body;
     msisdn = normalizeMsisdn(msisdn);
     logAlways('Normalized msisdn:', msisdn);
@@ -140,7 +168,7 @@ app.post('/api/haskback_push', async (req, res) => {
     for (const [k, v] of Object.entries(payload)) {
       if (!v || (typeof v === 'string' && v.trim() === '')) {
         errorAlways(`Missing or empty field: ${k}`, 'Current value:', v);
-        return res.status(400).json({ success: false, message: `Missing or empty field: ${k}`, debug: { field: k, value: v, env: process.env } });
+        return res.status(400).json({ success: false, message: `Missing or empty field: ${k}` });
       }
     }
     // --- Initiate STK push ---
@@ -227,5 +255,13 @@ app.post('/api/haskback_callback', (req, res) => {
 });
 
 app.get('/api/health', (req, res) => res.send('ok'));
+
+app.get('/api/stk_readiness', (req, res) => {
+  const missing = getMissingStkConfig();
+  if (missing.length > 0) {
+    return res.status(500).json({ ready: false, missing });
+  }
+  return res.json({ ready: true });
+});
 
 app.listen(PORT, () => logAlways('Listening on', PORT));
