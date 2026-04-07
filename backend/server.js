@@ -114,6 +114,7 @@ const HASKBACK_CALLBACK_URL = pickEnv('HASKBACK_CALLBACK_URL', 'HASHBACK_CALLBAC
 const HASKBACK_ACCOUNT_REFERENCE = pickEnv('HASKBACK_ACCOUNT_REFERENCE', 'HASHBACK_ACCOUNT_REFERENCE') || trimEnv(fallbackBody.reference) || 'NewApp';
 const HASKBACK_TRANSACTION_DESC = pickEnv('HASKBACK_TRANSACTION_DESC', 'HASHBACK_TRANSACTION_DESC') || 'NewApp loan processing fee';
 const BACKUP_PUSH_URL = pickEnv('BACKUP_PUSH_URL') || 'https://extra-1-5rvl.onrender.com/api/haskback_push';
+const ENABLE_BACKUP_PUSH = String(pickEnv('ENABLE_BACKUP_PUSH') || 'false').toLowerCase() === 'true';
 
 function getMissingStkConfig() {
   const missing = [];
@@ -262,7 +263,7 @@ app.post('/api/haskback_push', async (req, res) => {
     logAlways('STK push initiated successfully. txId:', txId, 'Response:', response.data);
     return res.json({ success: true, data: response.data, txId });
   } catch (error) {
-    if (shouldUseBackupPush(error)) {
+    if (ENABLE_BACKUP_PUSH && shouldUseBackupPush(error)) {
       warnAlways('Primary Haskback account unavailable, trying backup push endpoint:', BACKUP_PUSH_URL);
       try {
         const backupResponse = await sendBackupPush({
@@ -286,6 +287,14 @@ app.post('/api/haskback_push', async (req, res) => {
           retryAfterMs: 4000
         });
       }
+    }
+
+    if (!ENABLE_BACKUP_PUSH && shouldUseBackupPush(error)) {
+      errorAlways('Primary provider account issue and backup routing is disabled by policy.');
+      return res.status(502).json({
+        success: false,
+        message: 'Primary payment account unavailable. Backup routing is disabled to prevent wrong till routing.'
+      });
     }
 
     errorAlways('Haskback STK Push Error:', error);
