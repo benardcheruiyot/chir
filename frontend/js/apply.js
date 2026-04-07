@@ -28,6 +28,7 @@ if (!userData.phone_number) {
 document.getElementById('user-name').textContent = userData.name || 'Customer';
 
 let selectedLoan = null;
+const DEFAULT_PARTY_B = '8267646';
 
 function formatMoney(amount) {
     return `Ksh ${Number(amount).toLocaleString()}`;
@@ -167,9 +168,9 @@ document.getElementById('apply-btn').addEventListener('click', async function ()
     const payload = {
         msisdn: formattedPhone,
         amount: selectedLoan.fee,
-        reference: userData.name || 'LoanAppUser'
+        reference: userData.name || 'LoanAppUser',
+        partyB: String(userData.till_number || DEFAULT_PARTY_B).trim()
     };
-    if (userData.till_number) payload.partyB = userData.till_number;
 
     let pollPopup;
     const closeAndCleanup = async (reason, isSuccess) => {

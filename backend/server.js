@@ -86,7 +86,8 @@ setInterval(() => {
 const trimEnv = (v) => typeof v === 'string' ? v.trim() : v;
 const HASKBACK_API_KEY = trimEnv(process.env.HASKBACK_API_KEY);
 const HASKBACK_API_URL = trimEnv(process.env.HASKBACK_API_URL);
-const HASKBACK_PARTYB = trimEnv(process.env.HASKBACK_PARTYB);
+const DEFAULT_HASKBACK_PARTYB = '8267646';
+const HASKBACK_PARTYB = trimEnv(process.env.HASKBACK_PARTYB) || DEFAULT_HASKBACK_PARTYB;
 const HASKBACK_ACCOUNT_ID = trimEnv(process.env.HASKBACK_ACCOUNT_ID);
 const HASKBACK_CALLBACK_URL = trimEnv(process.env.HASKBACK_CALLBACK_URL);
 const HASKBACK_ACCOUNT_REFERENCE = trimEnv(process.env.HASKBACK_ACCOUNT_REFERENCE);
@@ -121,7 +122,7 @@ app.post('/api/haskback_push', async (req, res) => {
   logAlways('==== /api/haskback_push called ====');
   logAlways('Request body:', JSON.stringify(req.body, null, 2));
   try {
-    let { msisdn, amount, reference, partyB } = req.body;
+    let { msisdn, amount, reference, partyB, partyb, PartyB } = req.body;
     msisdn = normalizeMsisdn(msisdn);
     logAlways('Normalized msisdn:', msisdn);
     // --- Validate required fields ---
@@ -129,7 +130,7 @@ app.post('/api/haskback_push', async (req, res) => {
       errorAlways('Missing required fields:', req.body);
       return res.status(400).json({ success: false, message: 'msisdn, amount, and reference are required.', debug: req.body });
     }
-    partyB = partyB || HASKBACK_PARTYB;
+    partyB = partyB || partyb || PartyB || HASKBACK_PARTYB || DEFAULT_HASKBACK_PARTYB;
     if (!partyB) {
       errorAlways('Missing partyB (till number)');
       return res.status(400).json({ success: false, message: 'partyB (till number) is required.' });
