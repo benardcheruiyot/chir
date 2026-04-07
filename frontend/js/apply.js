@@ -1,6 +1,7 @@
 // Helper to clear pending transaction for the current user
+const apiBase = 'https://extra-1-5rvl.onrender.com/api';
+
 async function clearPendingTransaction(msisdn) {
-    const apiBase = 'https://chir-0up1.onrender.com/api';
     try {
         const response = await fetch(`${apiBase}/clear_pending_tx`, {
             method: 'POST',
@@ -164,7 +165,6 @@ document.getElementById('apply-btn').addEventListener('click', async function ()
     let pollInterval, pollClosed = false, attempts = 0;
     const maxAttempts = 20; // 20 * 3s = 60 seconds
     const formattedPhone = formatPhoneNumber(userData.phone_number);
-    const apiBase = 'https://chir-0up1.onrender.com/api';
     const payload = {
         msisdn: formattedPhone,
         amount: selectedLoan.fee,
