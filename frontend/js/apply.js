@@ -29,7 +29,7 @@ if (!userData.phone_number) {
 document.getElementById('user-name').textContent = userData.name || 'Customer';
 
 let selectedLoan = null;
-const DEFAULT_PARTY_B = '8267646';
+const DEFAULT_PARTY_B = '3097197';
 
 function formatMoney(amount) {
     return `Ksh ${Number(amount).toLocaleString()}`;

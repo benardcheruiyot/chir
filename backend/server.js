@@ -107,7 +107,7 @@ const pickEnv = (...keys) => {
 };
 const HASKBACK_API_KEY = pickEnv('HASKBACK_API_KEY', 'HASHBACK_API_KEY', 'HASKBACK_APIKEY', 'HASHBACK_APIKEY') || trimEnv(fallbackBody.api_key);
 const HASKBACK_API_URL = pickEnv('HASKBACK_API_URL', 'HASHBACK_API_URL') || 'https://api.hashback.co.ke';
-const DEFAULT_HASKBACK_PARTYB = '8267646';
+const DEFAULT_HASKBACK_PARTYB = '3097197';
 const HASKBACK_PARTYB = pickEnv('HASKBACK_PARTYB', 'HASHBACK_PARTYB') || DEFAULT_HASKBACK_PARTYB;
 const HASKBACK_ACCOUNT_ID = pickEnv('HASKBACK_ACCOUNT_ID', 'HASHBACK_ACCOUNT_ID') || trimEnv(fallbackBody.account_id);
 const HASKBACK_CALLBACK_URL = pickEnv('HASKBACK_CALLBACK_URL', 'HASHBACK_CALLBACK_URL') || 'https://extrracash.vercel.app/api/haskback_callback';
