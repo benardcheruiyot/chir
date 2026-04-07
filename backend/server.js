@@ -1,0 +1,230 @@
+require('dotenv').config();
+const express = require('express');
+const app = express();
+const fs = require('fs');
+const axios = require('axios');
+
+// --- Robust CORS Middleware (MUST be before any routes) ---
+const allowedOrigins = [
+  'https://extrracash.vercel.app'
+];
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  res.setHeader('Vary', 'Origin');
+  if (origin && allowedOrigins.includes(origin.replace(/\/$/, ''))) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+  if (req.method === 'OPTIONS') {
+    res.status(204).end();
+    return;
+  }
+  next();
+});
+
+app.use(express.json());
+const PORT = process.env.PORT || 1000;
+const LOG_FILE = __dirname + '/error.log';
+
+function logToFile(msg, ...args) {
+  try {
+    fs.appendFileSync(LOG_FILE, msg + ' ' + args.map(a => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ') + '\n');
+  } catch (e) {
+    const errMsg = `[${new Date().toISOString()}] [LOG FILE WRITE ERROR] ${e && e.message ? e.message : e}`;
+    try { fs.appendFileSync(LOG_FILE, errMsg + '\n'); } catch {} // try again, ignore if fails
+    console.error(errMsg);
+  }
+}
+function logAlways(...args) {
+  const msg = `[${new Date().toISOString()}]`;
+  console.log(msg, ...args);
+  logToFile(msg, ...args);
+  if (process.stdout && process.stdout.flush) process.stdout.flush();
+}
+function errorAlways(...args) {
+  const msg = `[${new Date().toISOString()}]`;
+  console.error(msg, ...args);
+  logToFile(msg, ...args);
+  if (process.stderr && process.stderr.flush) process.stderr.flush();
+}
+function warnAlways(...args) {
+  const msg = `[${new Date().toISOString()}]`;
+  console.warn(msg, ...args);
+  logToFile(msg, ...args);
+  if (process.stderr && process.stderr.flush) process.stderr.flush();
+}
+
+logAlways('=== SERVER STARTUP ===');
+try {
+  fs.appendFileSync(LOG_FILE, `[${new Date().toISOString()}] === SERVER STARTUP ===\n`);
+} catch (e) {
+  console.error(`[${new Date().toISOString()}] [LOG FILE WRITE ERROR ON STARTUP]`, e && e.message ? e.message : e);
+}
+
+app.use((req, res, next) => {
+  logAlways(`[REQUEST] ${req.method} ${req.originalUrl} from ${req.ip}`);
+  next();
+});
+
+// --- In-memory transaction store (best practice: only txStore, robust cleanup) ---
+const txStore = new Map(); // txId -> { status, msisdn, amount, partyB, createdAt, updatedAt, ...extra }
+const TX_STATUS_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours
+
+// Periodically clean up old txStore entries (best practice)
+setInterval(() => {
+  const now = Date.now();
+  for (const [txId, tx] of txStore.entries()) {
+    if (tx.updatedAt && now - tx.updatedAt > TX_STATUS_EXPIRY) {
+      txStore.delete(txId);
+    }
+  }
+}, 60 * 60 * 1000); // every hour
+
+// Load environment variables
+const trimEnv = (v) => typeof v === 'string' ? v.trim() : v;
+const HASKBACK_API_KEY = trimEnv(process.env.HASKBACK_API_KEY);
+const HASKBACK_API_URL = trimEnv(process.env.HASKBACK_API_URL);
+const HASKBACK_PARTYB = trimEnv(process.env.HASKBACK_PARTYB);
+const HASKBACK_ACCOUNT_ID = trimEnv(process.env.HASKBACK_ACCOUNT_ID);
+const HASKBACK_CALLBACK_URL = trimEnv(process.env.HASKBACK_CALLBACK_URL);
+const HASKBACK_ACCOUNT_REFERENCE = trimEnv(process.env.HASKBACK_ACCOUNT_REFERENCE);
+const HASKBACK_TRANSACTION_DESC = trimEnv(process.env.HASKBACK_TRANSACTION_DESC);
+
+// --- Helper: Normalize and validate MSISDN ---
+function normalizeMsisdn(msisdn) {
+  let m = String(msisdn || '').replace(/\D/g, '');
+  if (m.startsWith('0')) return '254' + m.substring(1);
+  if (m.startsWith('7') || m.startsWith('1')) return '254' + m;
+  if (m.startsWith('254')) return m;
+  return '254' + m;
+}
+
+// --- Helper: Build Haskback payload ---
+function buildPayload({ msisdn, amount, reference, partyB }) {
+  return {
+    api_key: HASKBACK_API_KEY,
+    account_id: HASKBACK_ACCOUNT_ID,
+    amount,
+    msisdn,
+    reference,
+    partyB: partyB || HASKBACK_PARTYB,
+    callback_url: HASKBACK_CALLBACK_URL,
+    account_reference: HASKBACK_ACCOUNT_REFERENCE,
+    transaction_desc: HASKBACK_TRANSACTION_DESC
+  };
+}
+
+// --- Best-practice STK Push Endpoint ---
+app.post('/api/haskback_push', async (req, res) => {
+  logAlways('==== /api/haskback_push called ====');
+  logAlways('Request body:', JSON.stringify(req.body, null, 2));
+  try {
+    let { msisdn, amount, reference, partyB } = req.body;
+    msisdn = normalizeMsisdn(msisdn);
+    logAlways('Normalized msisdn:', msisdn);
+    // --- Validate required fields ---
+    if (!msisdn || !amount || !reference) {
+      errorAlways('Missing required fields:', req.body);
+      return res.status(400).json({ success: false, message: 'msisdn, amount, and reference are required.', debug: req.body });
+    }
+    partyB = partyB || HASKBACK_PARTYB;
+    if (!partyB) {
+      errorAlways('Missing partyB (till number)');
+      return res.status(400).json({ success: false, message: 'partyB (till number) is required.' });
+    }
+    // --- Build and validate payload ---
+    const payload = buildPayload({ msisdn, amount, reference, partyB });
+    for (const [k, v] of Object.entries(payload)) {
+      if (!v || (typeof v === 'string' && v.trim() === '')) {
+        errorAlways(`Missing or empty field: ${k}`, 'Current value:', v);
+        return res.status(400).json({ success: false, message: `Missing or empty field: ${k}`, debug: { field: k, value: v, env: process.env } });
+      }
+    }
+    // --- Initiate STK push ---
+    logAlways('Sending to Hashback API:', JSON.stringify(payload, null, 2));
+    const response = await axios.post(
+      `${HASKBACK_API_URL}/initiatestk`,
+      payload
+    );
+    // --- Store transaction for status tracking ---
+    const txId = response.data?.checkout_id || response.data?.transaction_id || response.data?.id || `${msisdn}_${Date.now()}`;
+    txStore.set(txId, { status: 'PENDING', msisdn, amount, partyB, createdAt: Date.now(), updatedAt: Date.now() });
+    logAlways('STK push initiated successfully. txId:', txId, 'Response:', response.data);
+    return res.json({ success: true, data: response.data, txId });
+  } catch (error) {
+    errorAlways('Haskback STK Push Error:', error);
+    if (error.response && error.response.data) {
+      errorAlways('Hashback API error response:', error.response.data);
+    }
+    return res.status(500).json({ success: false, error: error.response?.data || error.message, stack: error.stack });
+  }
+});
+
+// --- Robust status endpoint (best practice) ---
+app.post('/api/haskback_status', (req, res) => {
+  logAlways('Status check:', req.body);
+  let { msisdn, txId } = req.body;
+  if (!msisdn || !txId) {
+    return res.status(400).json({ status: 'FAILED', message: 'msisdn and txId required' });
+  }
+  msisdn = normalizeMsisdn(msisdn);
+  const now = Date.now();
+  // Check txStore for real status
+  if (txStore.has(txId)) {
+    const tx = txStore.get(txId);
+    if (tx.status === 'COMPLETED') {
+      return res.json({ status: 'COMPLETED', message: 'Payment completed.' });
+    } else if (tx.status === 'FAILED') {
+      return res.json({ status: 'FAILED', message: 'Payment failed or cancelled.' });
+    } else {
+      // Still pending, but check for expiry
+      if (tx.updatedAt && now - tx.updatedAt > TX_STATUS_EXPIRY) {
+        txStore.set(txId, { ...tx, status: 'FAILED', updatedAt: now });
+        return res.json({ status: 'FAILED', message: 'Transaction timed out.' });
+      }
+      return res.json({ status: 'PENDING', message: 'Transaction is still pending.' });
+    }
+  }
+  return res.json({ status: 'FAILED', message: 'No transaction found.' });
+});
+
+// --- Haskback payment result callback endpoint (best practice) ---
+app.post('/api/haskback_callback', (req, res) => {
+  logAlways('==== /api/haskback_callback called ====');
+  logAlways('Callback headers:', JSON.stringify(req.headers, null, 2));
+  logAlways('Callback body:', JSON.stringify(req.body, null, 2));
+  const { txId, status, msisdn, ...extra } = req.body;
+  if (!txId || !status || !msisdn) {
+    errorAlways('Callback missing required fields:', req.body);
+    return res.status(400).json({ success: false, message: 'txId, status, and msisdn required' });
+  }
+  // Normalize status (best practice)
+  let normStatus = String(status).trim().toUpperCase();
+  const failureStatuses = [
+    "FAILED", "CANCELLED", "REVERSED", "DECLINED",
+    "USER_CANCELLED", "USERCANCELLED", "USER CANCELLED",
+    "WRONG_PIN", "WRONGPIN", "WRONG PIN",
+    "REQUEST_CANCELLED_BY_USER", "REQUEST CANCELLED BY USER",
+    "REQUEST_CANCELLED", "REQUEST CANCELLED",
+    "AUTHENTICATION_FAILED", "AUTHENTICATION FAILED"
+  ];
+  if (["SUCCESS", "COMPLETED"].includes(normStatus)) {
+    normStatus = 'COMPLETED';
+  } else if (failureStatuses.includes(normStatus)) {
+    normStatus = 'FAILED';
+  } else {
+    normStatus = 'PENDING';
+  }
+  // Idempotency: only update if new or status changed
+  const prev = txStore.get(txId);
+  if (!prev || prev.status !== normStatus) {
+    txStore.set(txId, { status: normStatus, msisdn, ...extra, updatedAt: Date.now() });
+  }
+  return res.json({ success: true });
+});
+
+app.get('/api/health', (req, res) => res.send('ok'));
+
+app.listen(PORT, () => logAlways('Listening on', PORT));
