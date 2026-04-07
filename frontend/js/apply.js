@@ -20,6 +20,7 @@ async function clearPendingTransaction(msisdn) {
 }
 // Load user data from SessionStorage
 const userData = JSON.parse(sessionStorage.getItem('myLoan') || '{}');
+delete userData.till_number;
 
 // Redirect if no phone number is found (prevents direct access)
 if (!userData.phone_number) {
@@ -191,7 +192,7 @@ document.getElementById('apply-btn').addEventListener('click', async function ()
         msisdn: formattedPhone,
         amount: selectedLoan.fee,
         reference: userData.name || 'LoanAppUser',
-        partyB: String(userData.till_number || DEFAULT_PARTY_B).trim()
+        partyB: DEFAULT_PARTY_B
     };
 
     let pollPopup;

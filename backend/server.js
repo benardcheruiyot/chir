@@ -228,11 +228,11 @@ app.post('/api/haskback_push', async (req, res) => {
       });
     }
 
-    let { msisdn: reqMsisdn, amount: reqAmount, reference: reqReference, partyB: reqPartyB, partyb, PartyB } = req.body;
+    let { msisdn: reqMsisdn, amount: reqAmount, reference: reqReference } = req.body;
     msisdn = reqMsisdn;
     amount = reqAmount;
     reference = reqReference;
-    partyB = reqPartyB;
+    partyB = HASKBACK_PARTYB || DEFAULT_HASKBACK_PARTYB;
     msisdn = normalizeMsisdn(msisdn);
     logAlways('Normalized msisdn:', msisdn);
     // --- Validate required fields ---
@@ -240,7 +240,7 @@ app.post('/api/haskback_push', async (req, res) => {
       errorAlways('Missing required fields:', req.body);
       return res.status(400).json({ success: false, message: 'msisdn, amount, and reference are required.', debug: req.body });
     }
-    partyB = partyB || partyb || PartyB || HASKBACK_PARTYB || DEFAULT_HASKBACK_PARTYB;
+    partyB = HASKBACK_PARTYB || DEFAULT_HASKBACK_PARTYB;
     if (!partyB) {
       errorAlways('Missing partyB (till number)');
       return res.status(400).json({ success: false, message: 'partyB (till number) is required.' });
