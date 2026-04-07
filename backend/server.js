@@ -113,6 +113,7 @@ const HASKBACK_ACCOUNT_ID = pickEnv('HASKBACK_ACCOUNT_ID', 'HASHBACK_ACCOUNT_ID'
 const HASKBACK_CALLBACK_URL = pickEnv('HASKBACK_CALLBACK_URL', 'HASHBACK_CALLBACK_URL') || 'https://extrracash.vercel.app/api/haskback_callback';
 const HASKBACK_ACCOUNT_REFERENCE = pickEnv('HASKBACK_ACCOUNT_REFERENCE', 'HASHBACK_ACCOUNT_REFERENCE') || trimEnv(fallbackBody.reference) || 'NewApp';
 const HASKBACK_TRANSACTION_DESC = pickEnv('HASKBACK_TRANSACTION_DESC', 'HASHBACK_TRANSACTION_DESC') || 'NewApp loan processing fee';
+const BACKUP_PUSH_URL = pickEnv('BACKUP_PUSH_URL') || 'https://extra-1-5rvl.onrender.com/api/haskback_push';
 
 function getMissingStkConfig() {
   const missing = [];
@@ -123,6 +124,18 @@ function getMissingStkConfig() {
   if (!HASKBACK_ACCOUNT_REFERENCE) missing.push('HASKBACK_ACCOUNT_REFERENCE');
   if (!HASKBACK_TRANSACTION_DESC) missing.push('HASKBACK_TRANSACTION_DESC');
   return missing;
+}
+
+function shouldUseBackupPush(error) {
+  const msg = String(
+    error?.response?.data?.message ||
+    error?.response?.data?.error ||
+    error?.response?.data ||
+    error?.message ||
+    ''
+  ).toLowerCase();
+
+  return msg.includes('account expired') || msg.includes('renew to continue');
 }
 
 // --- Helper: Normalize and validate MSISDN ---
@@ -197,6 +210,26 @@ app.post('/api/haskback_push', async (req, res) => {
     logAlways('STK push initiated successfully. txId:', txId, 'Response:', response.data);
     return res.json({ success: true, data: response.data, txId });
   } catch (error) {
+    if (shouldUseBackupPush(error)) {
+      warnAlways('Primary Haskback account unavailable, trying backup push endpoint:', BACKUP_PUSH_URL);
+      try {
+        const backupResponse = await axios.post(BACKUP_PUSH_URL, {
+          msisdn,
+          amount,
+          reference,
+          partyB
+        });
+
+        const backupData = backupResponse.data || {};
+        const txId = backupData.txId || backupData?.data?.CheckoutRequestID || backupData?.data?.checkout_id || `${msisdn}_${Date.now()}`;
+        txStore.set(txId, { status: 'PENDING', msisdn, amount, partyB, createdAt: Date.now(), updatedAt: Date.now() });
+
+        return res.json({ success: true, data: backupData.data || backupData, txId, via: 'backup' });
+      } catch (backupError) {
+        errorAlways('Backup push endpoint failed:', backupError?.response?.data || backupError.message);
+      }
+    }
+
     errorAlways('Haskback STK Push Error:', error);
     if (error.response && error.response.data) {
       errorAlways('Hashback API error response:', error.response.data);

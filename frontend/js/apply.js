@@ -39,6 +39,23 @@ function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function extractErrorMessage(raw) {
+    if (!raw) return 'Unable to process payment. Please try again.';
+    if (typeof raw === 'object') return raw.message || raw.error || JSON.stringify(raw);
+
+    const text = String(raw).trim();
+    if ((text.startsWith('{') && text.endsWith('}')) || (text.startsWith('[') && text.endsWith(']'))) {
+        try {
+            const parsed = JSON.parse(text);
+            return parsed.message || parsed.error || text;
+        } catch (e) {
+            return text;
+        }
+    }
+
+    return text;
+}
+
 // Helper to format phone number to 254XXXXXXXXX
 function formatPhoneNumber(phone) {
     let p = phone.toString().replace(/\D/g, ''); // Remove non-digits
@@ -256,7 +273,7 @@ document.getElementById('apply-btn').addEventListener('click', async function ()
             window.addEventListener('beforeunload', () => closeAndCleanup('unload', false));
         } else {
             let backendMsg = result && (result.error || result.message);
-            if (typeof backendMsg === 'object') backendMsg = JSON.stringify(backendMsg);
+            backendMsg = extractErrorMessage(backendMsg);
             await closeAndCleanup('failed', false);
             throw new Error(backendMsg || 'Failed to initiate payment');
         }
