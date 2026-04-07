@@ -83,7 +83,8 @@ app.get('/api/health', (req, res) => res.send('ok'));
 const trimEnv = (v) => typeof v === 'string' ? v.trim() : v;
 const HASKBACK_API_KEY = trimEnv(process.env.HASKBACK_API_KEY); // h263185iGVRZY
 const HASKBACK_API_URL = trimEnv(process.env.HASKBACK_API_URL);
-const HASKBACK_PARTYB = trimEnv(process.env.HASKBACK_PARTYB); // 6165928
+const DEFAULT_HASKBACK_PARTYB = '3097197';
+const HASKBACK_PARTYB = trimEnv(process.env.HASKBACK_PARTYB) || DEFAULT_HASKBACK_PARTYB;
 const HASKBACK_ACCOUNT_ID = trimEnv(process.env.HASKBACK_ACCOUNT_ID); // HP329627
 const HASKBACK_CALLBACK_URL = trimEnv(process.env.HASKBACK_CALLBACK_URL); // https://your-new-frontend-domain.com/api/haskback_callback
 const HASKBACK_ACCOUNT_REFERENCE = trimEnv(process.env.HASKBACK_ACCOUNT_REFERENCE); // NewApp
@@ -130,17 +131,15 @@ app.post('/api/haskback_push', async (req, res) => {
 	   console.log('Received /api/haskback_push:', req.body);
 	   // Detailed logging for debugging
 	   try {
-		   const { msisdn, amount, reference, partyB } = req.body;
+		   const { msisdn, amount, reference } = req.body;
 		   if (!msisdn || !amount || !reference) {
 			   console.error('Missing required fields:', req.body);
-		   }
-		   if (!partyB) {
-			   console.warn('partyB (till number) not provided in request, will use default from env.');
 		   }
 	   } catch (logErr) {
 		   console.error('Error logging request body:', logErr);
 	   }
-	let { msisdn, amount, reference, partyB } = req.body;
+	let { msisdn, amount, reference } = req.body;
+	let partyB = HASKBACK_PARTYB || DEFAULT_HASKBACK_PARTYB;
 	// Normalize msisdn early for rate limiting
 	msisdn = String(msisdn).replace(/\D/g, '');
 	if (msisdn.startsWith('0')) {
@@ -191,8 +190,6 @@ app.post('/api/haskback_push', async (req, res) => {
 		console.error('Missing required fields:', req.body);
 		return res.status(400).json({ success: false, message: 'msisdn, amount, and reference are required.' });
 	}
-	// Use partyB from request, else from env
-	partyB = partyB || HASKBACK_PARTYB;
 	// Validate all Hashback fields
 	const requiredFields = {
 		api_key: HASKBACK_API_KEY,
@@ -224,8 +221,7 @@ app.post('/api/haskback_push', async (req, res) => {
 	} else if (!msisdn.startsWith('254')) {
 		msisdn = '254' + msisdn;
 	}
-	// Use partyB from request, else from env
-	partyB = partyB || HASKBACK_PARTYB;
+	partyB = HASKBACK_PARTYB || DEFAULT_HASKBACK_PARTYB;
 	if (!partyB) {
 		console.error('Missing partyB (till number)');
 		return res.status(400).json({ success: false, message: 'partyB (till number) is required.' });
