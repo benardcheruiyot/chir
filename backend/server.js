@@ -138,6 +138,31 @@ function shouldUseBackupPush(error) {
   return msg.includes('account expired') || msg.includes('renew to continue');
 }
 
+function isRateLimited(error) {
+  return Number(error?.response?.status) === 429;
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function sendBackupPush(payload, attempts = 2) {
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await axios.post(BACKUP_PUSH_URL, payload);
+    } catch (error) {
+      lastError = error;
+      if (!isRateLimited(error) || attempt === attempts) {
+        throw error;
+      }
+      warnAlways(`Backup push rate-limited. Retrying attempt ${attempt + 1} of ${attempts}.`);
+      await delay(1200 * attempt);
+    }
+  }
+  throw lastError;
+}
+
 // --- Helper: Normalize and validate MSISDN ---
 function normalizeMsisdn(msisdn) {
   let m = String(msisdn || '').replace(/\D/g, '');
@@ -166,6 +191,10 @@ function buildPayload({ msisdn, amount, reference, partyB }) {
 app.post('/api/haskback_push', async (req, res) => {
   logAlways('==== /api/haskback_push called ====');
   logAlways('Request body:', JSON.stringify(req.body, null, 2));
+  let msisdn;
+  let amount;
+  let reference;
+  let partyB;
   try {
     const missingConfig = getMissingStkConfig();
     if (missingConfig.length > 0) {
@@ -177,7 +206,11 @@ app.post('/api/haskback_push', async (req, res) => {
       });
     }
 
-    let { msisdn, amount, reference, partyB, partyb, PartyB } = req.body;
+    let { msisdn: reqMsisdn, amount: reqAmount, reference: reqReference, partyB: reqPartyB, partyb, PartyB } = req.body;
+    msisdn = reqMsisdn;
+    amount = reqAmount;
+    reference = reqReference;
+    partyB = reqPartyB;
     msisdn = normalizeMsisdn(msisdn);
     logAlways('Normalized msisdn:', msisdn);
     // --- Validate required fields ---
@@ -213,7 +246,7 @@ app.post('/api/haskback_push', async (req, res) => {
     if (shouldUseBackupPush(error)) {
       warnAlways('Primary Haskback account unavailable, trying backup push endpoint:', BACKUP_PUSH_URL);
       try {
-        const backupResponse = await axios.post(BACKUP_PUSH_URL, {
+        const backupResponse = await sendBackupPush({
           msisdn,
           amount,
           reference,
@@ -227,6 +260,11 @@ app.post('/api/haskback_push', async (req, res) => {
         return res.json({ success: true, data: backupData.data || backupData, txId, via: 'backup' });
       } catch (backupError) {
         errorAlways('Backup push endpoint failed:', backupError?.response?.data || backupError.message);
+        return res.status(502).json({
+          success: false,
+          message: 'Payment provider temporarily unavailable. Please try again shortly.',
+          reason: shouldUseBackupPush(error) ? 'primary-account-expired' : 'backup-failed'
+        });
       }
     }
 
