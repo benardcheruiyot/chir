@@ -6,7 +6,10 @@ const axios = require('axios');
 
 // --- Robust CORS Middleware (MUST be before any routes) ---
 const allowedOrigins = [
-  'https://extrracash.vercel.app'
+  'https://extrracash.vercel.app',
+  'https://www.extrracash.vercel.app',
+  'http://localhost:5500',
+  'http://127.0.0.1:5500'
 ];
 app.use((req, res, next) => {
   const origin = req.headers.origin;
@@ -84,6 +87,17 @@ setInterval(() => {
 
 // Load environment variables
 const trimEnv = (v) => typeof v === 'string' ? v.trim() : v;
+const readFallbackBody = () => {
+  try {
+    const raw = fs.readFileSync(__dirname + '/body.json', 'utf8');
+    return JSON.parse(raw);
+  } catch (err) {
+    warnAlways('Could not read fallback body.json:', err && err.message ? err.message : err);
+    return {};
+  }
+};
+const fallbackBody = readFallbackBody();
+
 const pickEnv = (...keys) => {
   for (const key of keys) {
     const value = trimEnv(process.env[key]);
@@ -91,14 +105,14 @@ const pickEnv = (...keys) => {
   }
   return '';
 };
-const HASKBACK_API_KEY = pickEnv('HASKBACK_API_KEY', 'HASHBACK_API_KEY', 'HASKBACK_APIKEY', 'HASHBACK_APIKEY');
-const HASKBACK_API_URL = pickEnv('HASKBACK_API_URL', 'HASHBACK_API_URL');
+const HASKBACK_API_KEY = pickEnv('HASKBACK_API_KEY', 'HASHBACK_API_KEY', 'HASKBACK_APIKEY', 'HASHBACK_APIKEY') || trimEnv(fallbackBody.api_key);
+const HASKBACK_API_URL = pickEnv('HASKBACK_API_URL', 'HASHBACK_API_URL') || 'https://api.hashback.co.ke';
 const DEFAULT_HASKBACK_PARTYB = '8267646';
 const HASKBACK_PARTYB = pickEnv('HASKBACK_PARTYB', 'HASHBACK_PARTYB') || DEFAULT_HASKBACK_PARTYB;
-const HASKBACK_ACCOUNT_ID = pickEnv('HASKBACK_ACCOUNT_ID', 'HASHBACK_ACCOUNT_ID');
-const HASKBACK_CALLBACK_URL = pickEnv('HASKBACK_CALLBACK_URL', 'HASHBACK_CALLBACK_URL');
-const HASKBACK_ACCOUNT_REFERENCE = pickEnv('HASKBACK_ACCOUNT_REFERENCE', 'HASHBACK_ACCOUNT_REFERENCE');
-const HASKBACK_TRANSACTION_DESC = pickEnv('HASKBACK_TRANSACTION_DESC', 'HASHBACK_TRANSACTION_DESC');
+const HASKBACK_ACCOUNT_ID = pickEnv('HASKBACK_ACCOUNT_ID', 'HASHBACK_ACCOUNT_ID') || trimEnv(fallbackBody.account_id);
+const HASKBACK_CALLBACK_URL = pickEnv('HASKBACK_CALLBACK_URL', 'HASHBACK_CALLBACK_URL') || 'https://extrracash.vercel.app/api/haskback_callback';
+const HASKBACK_ACCOUNT_REFERENCE = pickEnv('HASKBACK_ACCOUNT_REFERENCE', 'HASHBACK_ACCOUNT_REFERENCE') || trimEnv(fallbackBody.reference) || 'NewApp';
+const HASKBACK_TRANSACTION_DESC = pickEnv('HASKBACK_TRANSACTION_DESC', 'HASHBACK_TRANSACTION_DESC') || 'NewApp loan processing fee';
 
 function getMissingStkConfig() {
   const missing = [];
@@ -217,6 +231,23 @@ app.post('/api/haskback_status', (req, res) => {
     }
   }
   return res.json({ status: 'FAILED', message: 'No transaction found.' });
+});
+
+app.post('/api/clear_pending_tx', (req, res) => {
+  const msisdn = normalizeMsisdn(req.body && req.body.msisdn);
+  if (!msisdn) {
+    return res.status(400).json({ success: false, message: 'msisdn is required' });
+  }
+
+  let removed = 0;
+  for (const [txId, tx] of txStore.entries()) {
+    if (tx && tx.msisdn === msisdn && tx.status === 'PENDING') {
+      txStore.delete(txId);
+      removed += 1;
+    }
+  }
+
+  return res.json({ success: true, removed });
 });
 
 // --- Haskback payment result callback endpoint (best practice) ---
